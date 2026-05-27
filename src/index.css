@@ -1,0 +1,261 @@
+@import '@fontsource/prompt/300.css';
+@import '@fontsource/prompt/400.css';
+@import '@fontsource/prompt/500.css';
+@import '@fontsource/prompt/600.css';
+@import '@fontsource/prompt/700.css';
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --font-sans: 'Prompt', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-thai: 'Prompt', sans-serif;
+  --text-xs: 0.8125rem;
+  --text-sm: 0.9375rem;
+  --text-base: 1.0625rem;
+  --text-lg: 1.1875rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.625rem;
+  --text-3xl: 2rem;
+  --text-4xl: 2.5rem;
+}
+
+/* Medical/teal theme */
+:root {
+  --background: oklch(0.99 0.005 240);
+  --foreground: oklch(0.18 0.04 240);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.18 0.04 240);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.18 0.04 240);
+  --primary: oklch(0.55 0.13 200);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.96 0.02 200);
+  --secondary-foreground: oklch(0.30 0.10 220);
+  --muted: oklch(0.97 0.01 240);
+  --muted-foreground: oklch(0.45 0.025 240);
+  --accent: oklch(0.94 0.05 200);
+  --accent-foreground: oklch(0.30 0.10 220);
+  --destructive: oklch(0.60 0.22 25);
+  --border: oklch(0.92 0.012 240);
+  --input: oklch(0.94 0.012 240);
+  --ring: oklch(0.60 0.13 200);
+  --radius: 0.75rem;
+}
+
+.dark {
+  --background: oklch(0.15 0.03 240);
+  --foreground: oklch(0.97 0.01 240);
+  --card: oklch(0.20 0.035 240);
+  --card-foreground: oklch(0.97 0.01 240);
+  --popover: oklch(0.20 0.035 240);
+  --popover-foreground: oklch(0.97 0.01 240);
+  --primary: oklch(0.72 0.15 200);
+  --primary-foreground: oklch(0.15 0.03 240);
+  --secondary: oklch(0.27 0.04 240);
+  --secondary-foreground: oklch(0.97 0.01 240);
+  --muted: oklch(0.27 0.04 240);
+  --muted-foreground: oklch(0.70 0.02 240);
+  --accent: oklch(0.30 0.06 200);
+  --accent-foreground: oklch(0.97 0.01 240);
+  --destructive: oklch(0.70 0.19 25);
+  --border: oklch(0.30 0.02 240);
+  --input: oklch(0.30 0.02 240);
+  --ring: oklch(0.55 0.12 200);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * { @apply border-border outline-ring/50; }
+  html {
+    font-family: 'Prompt', sans-serif;
+    font-size: 17px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  @media (max-width: 640px) {
+    html { font-size: 16px; }
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-weight: 400;
+    line-height: 1.6;
+  }
+  h1, h2, h3, h4 {
+    @apply font-semibold tracking-tight;
+    line-height: 1.25;
+  }
+  button, input, select, textarea {
+    font-family: inherit;
+  }
+  button, a {
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* รับ tap target ใหญ่บนมือถือ */
+  button, [role="button"], a {
+    min-height: 36px;
+  }
+}
+
+@layer components {
+  /* Alert color tiers */
+  .alert-red    { @apply bg-red-50 border-red-200 text-red-900 dark:bg-red-950/40 dark:border-red-800 dark:text-red-200; }
+  .alert-orange { @apply bg-orange-50 border-orange-200 text-orange-900 dark:bg-orange-950/40 dark:border-orange-800 dark:text-orange-200; }
+  .alert-yellow { @apply bg-yellow-50 border-yellow-200 text-yellow-900 dark:bg-yellow-950/40 dark:border-yellow-800 dark:text-yellow-200; }
+  .alert-green  { @apply bg-emerald-50 border-emerald-200 text-emerald-900 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-200; }
+  .alert-blue   { @apply bg-sky-50 border-sky-200 text-sky-900 dark:bg-sky-950/40 dark:border-sky-800 dark:text-sky-200; }
+  .alert-purple { @apply bg-violet-50 border-violet-200 text-violet-900 dark:bg-violet-950/40 dark:border-violet-800 dark:text-violet-200; }
+
+  .glass {
+    @apply bg-white/75 backdrop-blur-xl border border-white/40 shadow-xl shadow-cyan-100/40
+           dark:bg-slate-900/60 dark:border-slate-700/40 dark:shadow-slate-950/40;
+  }
+
+  .hero-gradient {
+    background:
+      radial-gradient(1200px 600px at 10% -10%, oklch(0.92 0.10 200 / 0.6), transparent 60%),
+      radial-gradient(1000px 500px at 90% 10%, oklch(0.92 0.10 280 / 0.5), transparent 60%),
+      linear-gradient(180deg, oklch(0.98 0.02 220), oklch(0.97 0.02 240));
+  }
+  .dark .hero-gradient {
+    background:
+      radial-gradient(1200px 600px at 10% -10%, oklch(0.35 0.12 200 / 0.4), transparent 60%),
+      radial-gradient(1000px 500px at 90% 10%, oklch(0.35 0.12 280 / 0.35), transparent 60%),
+      linear-gradient(180deg, oklch(0.15 0.03 240), oklch(0.13 0.03 240));
+  }
+
+  .soft-card {
+    @apply rounded-2xl border bg-card shadow-sm hover:shadow-md transition-shadow;
+  }
+
+  .stat-grad-cyan   { background: linear-gradient(135deg, oklch(0.94 0.06 200), oklch(0.96 0.04 220)); }
+  .stat-grad-violet { background: linear-gradient(135deg, oklch(0.94 0.06 290), oklch(0.96 0.04 270)); }
+  .stat-grad-emerald{ background: linear-gradient(135deg, oklch(0.94 0.07 160), oklch(0.96 0.04 180)); }
+  .stat-grad-amber  { background: linear-gradient(135deg, oklch(0.95 0.08 75), oklch(0.96 0.05 60)); }
+  .stat-grad-rose   { background: linear-gradient(135deg, oklch(0.94 0.07 20), oklch(0.96 0.04 40)); }
+
+  .dark .stat-grad-cyan    { background: linear-gradient(135deg, oklch(0.30 0.08 200), oklch(0.25 0.05 220)); color: oklch(0.95 0.05 200); }
+  .dark .stat-grad-violet  { background: linear-gradient(135deg, oklch(0.30 0.08 290), oklch(0.25 0.05 270)); color: oklch(0.95 0.05 290); }
+  .dark .stat-grad-emerald { background: linear-gradient(135deg, oklch(0.30 0.08 160), oklch(0.25 0.05 180)); color: oklch(0.95 0.05 160); }
+  .dark .stat-grad-amber   { background: linear-gradient(135deg, oklch(0.32 0.10 75),  oklch(0.27 0.07 60));  color: oklch(0.96 0.07 75); }
+  .dark .stat-grad-rose    { background: linear-gradient(135deg, oklch(0.30 0.10 20),  oklch(0.25 0.07 40));  color: oklch(0.96 0.07 20); }
+
+  .tap-card {
+    @apply rounded-2xl border bg-card p-3 flex flex-col items-center gap-1.5 text-center cursor-pointer
+           transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md hover:border-primary/30 active:scale-95;
+  }
+
+  .link-underline {
+    @apply relative inline-block;
+  }
+  .link-underline::after {
+    @apply absolute left-0 -bottom-0.5 h-px w-0 bg-current transition-all duration-200;
+    content: '';
+  }
+  .link-underline:hover::after { @apply w-full; }
+
+  .pulse-dot {
+    @apply relative inline-flex h-2 w-2 rounded-full bg-emerald-500;
+  }
+  .pulse-dot::after {
+    content: '';
+    @apply absolute inset-0 rounded-full bg-emerald-500 animate-ping opacity-60;
+  }
+
+  .nice-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+  .nice-scroll::-webkit-scrollbar-thumb { @apply bg-slate-300 rounded-full; }
+  .nice-scroll::-webkit-scrollbar-thumb:hover { @apply bg-slate-400; }
+
+  /* Stat banner สีเตือน */
+  .had-badge {
+    @apply inline-flex items-center gap-1 bg-red-600 text-white px-2 py-0.5 rounded-md text-[11px] font-bold uppercase;
+  }
+  .lasa-badge {
+    @apply inline-flex items-center gap-1 bg-amber-500 text-white px-2 py-0.5 rounded-md text-[11px] font-bold uppercase;
+  }
+
+  /* Required input — เน้นช่องที่ต้องกรอก */
+  .required-input {
+    @apply ring-2 ring-amber-300 ring-offset-2 ring-offset-background border-amber-400;
+    box-shadow: 0 0 0 1px theme('colors.amber.300'), 0 4px 12px theme('colors.amber.100/40%');
+  }
+  .dark .required-input {
+    box-shadow: 0 0 0 1px theme('colors.amber.500'), 0 4px 12px theme('colors.amber.900/30%');
+  }
+  .required-label::after {
+    content: ' *';
+    @apply text-red-500 font-bold;
+  }
+
+  /* Sticker 5x7 cm */
+  .sticker-5x7 {
+    width: 5cm;
+    height: 7cm;
+    padding: 0.25cm;
+    box-sizing: border-box;
+    overflow: hidden;
+    page-break-inside: avoid;
+    border: 1px dashed #ccc;
+    font-size: 9pt;
+    line-height: 1.3;
+    background: white;
+    color: black;
+  }
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fade-up { animation: fade-up 0.35s ease-out both; }
+.fade-up-stagger > * { animation: fade-up 0.4s ease-out both; }
+.fade-up-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.fade-up-stagger > *:nth-child(2) { animation-delay: 50ms; }
+.fade-up-stagger > *:nth-child(3) { animation-delay: 100ms; }
+.fade-up-stagger > *:nth-child(4) { animation-delay: 150ms; }
+.fade-up-stagger > *:nth-child(5) { animation-delay: 200ms; }
+.fade-up-stagger > *:nth-child(6) { animation-delay: 250ms; }
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: white !important; color: black !important; }
+  .sticker-page {
+    display: grid;
+    grid-template-columns: repeat(3, 5cm);
+    gap: 0.3cm;
+    page-break-after: always;
+  }
+  @page {
+    size: A4;
+    margin: 0.5cm;
+  }
+  .sticker-5x7 {
+    border: 1px solid #999 !important;
+  }
+}

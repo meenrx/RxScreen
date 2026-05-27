@@ -1,0 +1,21 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "LAB_RULES",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "icode", "order": "ASCENDING" },
+        { "fieldPath": "priority", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "DISPENSING_LOG",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "pharmacist_uid", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

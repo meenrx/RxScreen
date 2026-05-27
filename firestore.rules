@@ -1,0 +1,142 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userExists() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isActive() {
+      return userExists() && userDoc().active == true;
+    }
+
+    function hasRole(role) {
+      return userExists() && userDoc().role == role && userDoc().active == true;
+    }
+
+    function hasAnyRole(roles) {
+      return userExists() && (userDoc().role in roles) && userDoc().active == true;
+    }
+
+    // === users ===
+    match /users/{userId} {
+      // อ่าน: self, หรือ admin, หรือ active pharmacist (เพื่อให้ Admin panel เห็น list)
+      allow read: if isSignedIn() && (request.auth.uid == userId
+                                       || hasAnyRole(['admin', 'pharmacist']));
+      // create: ตัวเองสมัครครั้งแรก (uid ต้องตรง)
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      // update: admin หรือเจ้าของ (ห้ามแก้ role / active ตัวเอง)
+      allow update: if hasRole('admin')
+                    || (request.auth.uid == userId
+                        && request.resource.data.role == resource.data.role
+                        && request.resource.data.active == resource.data.active);
+      allow delete: if hasRole('admin');
+    }
+
+    // === CONFIG/system — public flag (รู้ว่าระบบ initialized แล้วยัง) ===
+    match /CONFIG/system {
+      allow read: if isSignedIn();
+      // create เฉพาะตอนยังไม่มี (first user marker)
+      allow create: if isSignedIn() && !exists(/databases/$(database)/documents/CONFIG/system);
+      allow update, delete: if hasRole('admin');
+    }
+
+    // === CONFIG/* — เก็บ API key + settings (เฉพาะ active user อ่านได้, admin เขียน) ===
+    match /CONFIG/{docId} {
+      allow read: if isActive();
+      allow write: if hasRole('admin');
+    }
+
+    // === DRUG_MASTER ===
+    match /DRUG_MASTER/{docId} {
+      allow read: if isActive();
+      allow write: if hasAnyRole(['admin', 'pharmacist']);
+    }
+
+    // === LAB_RULES ===
+    match /LAB_RULES/{docId} {
+      allow read: if isActive();
+      allow write: if hasAnyRole(['admin', 'pharmacist']);
+    }
+
+    // === DDI_OVERRIDE ===
+    match /DDI_OVERRIDE/{docId} {
+      allow read: if isActive();
+      allow write: if hasAnyRole(['admin', 'pharmacist']);
+    }
+
+    // === DRUG_COUNSELING ===
+    match /DRUG_COUNSELING/{docId} {
+      allow read: if isActive();
+      allow write: if hasAnyRole(['admin', 'pharmacist']);
+    }
+
+    // === DISEASE_RULES ===
+    match /DISEASE_RULES/{docId} {
+      allow read: if isActive();
+      allow write: if hasAnyRole(['admin', 'pharmacist']);
+    }
+
+    // === DISPENSING_LOG — append-only audit ===
+    match /DISPENSING_LOG/{docId} {
+      allow read: if isActive();
+      allow create: if isActive();
+      allow update, delete: if hasRole('admin');
+    }
+
+    // === Warfarin protocol / TWD / Sticker preferences ===
+    match /WARFARIN_INR_PROTOCOL/{docId} {
+      allow read: if isActive();
+      allow write: if hasAnyRole(['admin', 'pharmacist']);
+    }
+    match /WARFARIN_TWD_TABLE/{docId} {
+      allow read: if isActive();
+      allow write: if hasAnyRole(['admin', 'pharmacist']);
+    }
+    match /STICKER_PREFERENCES/{docId} {
+      allow read: if isActive();
+      allow write: if isActive();
+    }
+
+    // === Tools logs ===
+    match /ADR_REPORTS/{docId} {
+      allow read: if isActive();
+      allow create: if isActive();
+      allow update, delete: if hasRole('admin');
+    }
+    match /DISCHARGE_MED_REC/{docId} {
+      allow read: if isActive();
+      allow create: if isActive();
+      allow update, delete: if hasRole('admin');
+    }
+    match /PHARMACIST_HANDOFF/{docId} {
+      allow read: if isActive();
+      allow create: if isActive();
+      allow update, delete: if isActive();
+    }
+    match /SUBSTITUTION_LOG/{docId} {
+      allow read: if isActive();
+      allow create: if isActive();
+      allow update, delete: if hasRole('admin');
+    }
+    match /DRUG_RECALL/{docId} {
+      allow read: if isActive();
+      allow create: if hasAnyRole(['admin', 'pharmacist']);
+      allow update, delete: if hasAnyRole(['admin', 'pharmacist']);
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
