@@ -131,18 +131,24 @@ export function LabRuleAdmin() {
                     <b>INR</b> สำหรับ Warfarin, <b>K+</b> สำหรับ ACEI/Spironolactone
                   </HelpHint>
                 </div>
+                <datalist id="dl-lab-param">
+                  {['SCr', 'BUN', 'CrCl', 'eGFR', 'INR', 'PT', 'aPTT', 'K+', 'Na+', 'Mg2+', 'Ca2+', 'Albumin', 'AST', 'ALT', 'ALP', 'TB', 'DB', 'Hb', 'Hct', 'WBC', 'Plt', 'FBS', 'HbA1c', 'TSH', 'Free T4', 'CK', 'Trop-T', 'Lactate', 'Vit D'].map((v) => <option key={v} value={v} />)}
+                </datalist>
+                <datalist id="dl-lab-unit">
+                  {['mg/dL', 'g/dL', 'mEq/L', 'mmol/L', 'U/L', 'IU/L', 'mcg/L', 'ng/mL', '%', 'sec', '×10³/µL', '×10⁶/µL', 'mL/min', 'mL/min/1.73m²'].map((v) => <option key={v} value={v} />)}
+                </datalist>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label className="mb-1.5">ชื่อค่า (Param)</Label>
-                    <Input value={edit.param ?? ''} onChange={(e) => setEdit({ ...edit, param: e.target.value })} placeholder="SCr / INR / K+ / Albumin" />
+                    <Input list="dl-lab-param" value={edit.param ?? ''} onChange={(e) => setEdit({ ...edit, param: e.target.value })} placeholder="ตัวอย่าง: SCr / INR / K+ / Albumin" />
                   </div>
                   <div>
                     <Label className="mb-1.5">หน่วย</Label>
-                    <Input value={edit.unit ?? ''} onChange={(e) => setEdit({ ...edit, unit: e.target.value })} placeholder="mg/dL / mEq/L" />
+                    <Input list="dl-lab-unit" value={edit.unit ?? ''} onChange={(e) => setEdit({ ...edit, unit: e.target.value })} placeholder="ตัวอย่าง: mg/dL / mEq/L / U/L" />
                   </div>
                   <div>
                     <Label className="mb-1.5">ช่วงปกติ</Label>
-                    <Input value={edit.normal_range ?? ''} onChange={(e) => setEdit({ ...edit, normal_range: e.target.value })} placeholder="0.6-1.3" />
+                    <Input value={edit.normal_range ?? ''} onChange={(e) => setEdit({ ...edit, normal_range: e.target.value })} placeholder="ตัวอย่าง: 0.6-1.3 / 2-3 / 3.5-5.0" />
                   </div>
                   <div>
                     <Label className="mb-1.5 flex items-center gap-2">
@@ -207,15 +213,15 @@ export function LabRuleAdmin() {
                 <div className="grid grid-cols-3 gap-2">
                   <div>
                     <Label className="mb-1.5 text-xs">min mg/kg</Label>
-                    <Input value={edit.min_dose_kg ?? ''} onChange={(e) => setEdit({ ...edit, min_dose_kg: e.target.value })} />
+                    <Input value={edit.min_dose_kg ?? ''} onChange={(e) => setEdit({ ...edit, min_dose_kg: e.target.value })} placeholder="10" />
                   </div>
                   <div>
                     <Label className="mb-1.5 text-xs">max mg/kg</Label>
-                    <Input value={edit.max_dose_kg ?? ''} onChange={(e) => setEdit({ ...edit, max_dose_kg: e.target.value })} />
+                    <Input value={edit.max_dose_kg ?? ''} onChange={(e) => setEdit({ ...edit, max_dose_kg: e.target.value })} placeholder="15" />
                   </div>
                   <div>
                     <Label className="mb-1.5 text-xs">max mg/day</Label>
-                    <Input value={edit.max_dose_day ?? ''} onChange={(e) => setEdit({ ...edit, max_dose_day: e.target.value })} />
+                    <Input value={edit.max_dose_day ?? ''} onChange={(e) => setEdit({ ...edit, max_dose_day: e.target.value })} placeholder="4000" />
                   </div>
                 </div>
               </div>

@@ -93,9 +93,18 @@ export function DrugCombobox({ drugs, value, onChange, placeholder = 'พิม�
                 {activeIdx === idx ? <Check className="size-3.5" /> : d.icode.slice(-2)}
               </span>
               <div className="flex-1 min-w-0">
-                <div className="font-medium text-sm leading-tight">{d.drug_name}</div>
-                <div className="text-[11px] text-muted-foreground">
-                  {[d.generic_name, d.drug_class, d.strength].filter(Boolean).join(' · ')}
+                <div className="font-medium text-sm leading-tight">
+                  {d.drug_name}
+                  {d.strength && <span className="text-muted-foreground font-normal"> · {d.strength}</span>}
+                  {(d.dosage_form || d.pack_unit) && <span className="text-[10px] text-muted-foreground font-normal"> ({d.dosage_form ?? d.pack_unit})</span>}
+                </div>
+                <div className="text-[11px] text-muted-foreground flex items-center gap-2">
+                  <span>{[d.generic_name, d.drug_category ?? d.drug_class].filter(Boolean).join(' · ')}</span>
+                  {d.unit_price != null && (
+                    <span className="ml-auto font-medium text-emerald-700 dark:text-emerald-400 tabular-nums">
+                      ฿{d.unit_price.toLocaleString()}
+                    </span>
+                  )}
                 </div>
               </div>
               <span className="font-mono text-[10px] text-muted-foreground self-center">{d.icode}</span>

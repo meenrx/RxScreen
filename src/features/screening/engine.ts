@@ -1,4 +1,4 @@
-import type { DdiOverride, DiseaseRule, DrugMaster, LabRule } from '@/types/drug'
+import type { DdiOverride, DiseaseRule, DrugMaster, HadRule, LabRule } from '@/types/drug'
 import type { DrugEntry, PatientInput, ScreeningAlert } from '@/types/screening'
 import { calcCrCl, findMatchingDoseAction } from '@/features/renal/calc'
 
@@ -275,19 +275,133 @@ export function buildAllergyAlerts(drugs: DrugEntry[], allergies: string[] | und
   return alerts
 }
 
-// ============ HAD (High Alert Drug) ============
-export function buildHadAlerts(drugs: DrugEntry[]): ScreeningAlert[] {
-  return drugs
-    .filter((d) => d.master?.is_HAD)
-    .map((d) => ({
+// ============ HAD (High Alert Drug) — เช็คคู่กับ HAD_RULES collection ถ้ามี ============
+export function buildHadAlerts(drugs: DrugEntry[], hadRules: HadRule[] = []): ScreeningAlert[] {
+  const alerts: ScreeningAlert[] = []
+  for (const d of drugs) {
+    if (!d.master) continue
+    // match HAD rule โดยใช้ generic_name หรือ drug_name
+    const nameLower = (d.master.drug_name ?? '').toLowerCase()
+    const genericLower = (d.master.generic_name ?? '').toLowerCase()
+    const rule = hadRules.find((r) => {
+      const k = r.drug_key.toLowerCase()
+      return nameLower.includes(k) || genericLower.includes(k)
+    })
+    if (!d.master.is_HAD && !rule) continue
+    const ruleDetail = rule ? [
+      rule.full_note,
+      rule.max_dose && `Max dose: ${rule.max_dose}`,
+      rule.max_rate && `Max rate: ${rule.max_rate}`,
+      rule.max_conc && `Max conc: ${rule.max_conc}`,
+      rule.dilution,
+      rule.route_note,
+      rule.antidote && `Antidote: ${rule.antidote}`,
+    ].filter(Boolean).join(' · ') : 'ยานี้อยู่ในรายการ High Alert Drug — ต้อง double check ก่อนจ่าย'
+    alerts.push({
       id: `had_${d.icode}`,
       type: 'HAD' as const,
       severity: 'red' as const,
-      title: `🔴 HIGH ALERT DRUG: ${d.master!.drug_name}`,
-      detail: 'ยานี้อยู่ในรายการ High Alert Drug ของโรงพยาบาล — ต้อง double check ก่อนจ่าย',
+      title: `🔴 HIGH ALERT DRUG: ${d.master.drug_name}`,
+      detail: ruleDetail,
       recommendation: 'ตรวจสอบ dose / route / patient identity ซ้ำ (double-check)',
       drugs: [d.icode],
-      source: d.master,
+      source: rule ?? d.master,
+    })
+  }
+  return alerts
+}
+
+// ============ Duplicate therapy class (ACEI+ARB, Statin+Statin, NSAID+NSAID, etc.) ============
+export function buildDupClassAlerts(drugs: DrugEntry[]): ScreeningAlert[] {
+  const alerts: ScreeningAlert[] = []
+  const byClass = new Map<string, DrugEntry[]>()
+  for (const d of drugs) {
+    const classes = d.master?.dup_class ?? []
+    for (const c of classes) {
+      const list = byClass.get(c) ?? []
+      list.push(d)
+      byClass.set(c, list)
+    }
+  }
+  // Conflicting class combos
+  const conflictPairs: [string, string, string][] = [
+    ['ACEI', 'ARB', 'ห้ามใช้ ACEI + ARB ร่วมกัน — เพิ่มเสี่ยง hyperkalemia, AKI, hypotension'],
+  ]
+  for (const [a, b, msg] of conflictPairs) {
+    const la = byClass.get(a) ?? []
+    const lb = byClass.get(b) ?? []
+    if (la.length && lb.length) {
+      alerts.push({
+        id: `dup_${a}_${b}`,
+        type: 'DRP',
+        severity: 'red',
+        title: `🚫 Duplicate: ${a} + ${b}`,
+        detail: msg + ' · พบ: ' + [...la, ...lb].map((d) => d.master?.drug_name ?? d.icode).join(', '),
+        recommendation: 'เลือกใช้ตัวใดตัวหนึ่ง — consult แพทย์',
+        drugs: [...la.map((d) => d.icode), ...lb.map((d) => d.icode)],
+      })
+    }
+  }
+  // Same class >= 2
+  for (const [cls, list] of byClass) {
+    if (list.length < 2) continue
+    if (cls === 'ACEI' || cls === 'ARB') continue // handled above
+    alerts.push({
+      id: `dup_${cls}`,
+      type: 'DRP',
+      severity: 'orange',
+      title: `🚫 Duplicate: ${cls} ${list.length} ตัว`,
+      detail: `${cls}: ${list.map((d) => d.master?.drug_name ?? d.icode).join(', ')} — ห้ามใช้ร่วมกันตามแนวทาง รพ.`,
+      recommendation: 'เลือกใช้ตัวเดียว — consult แพทย์',
+      drugs: list.map((d) => d.icode),
+    })
+  }
+  return alerts
+}
+
+// ============ Drug timing (Levothyroxine ก่อนอาหาร 1 ชม. ฯลฯ) ============
+export function buildTimingAlerts(drugs: DrugEntry[]): ScreeningAlert[] {
+  return drugs
+    .filter((d) => d.master?.timing_note)
+    .map((d) => ({
+      id: `timing_${d.icode}`,
+      type: 'TIMING' as const,
+      severity: 'blue' as const,
+      title: `⏰ เวลากิน: ${d.master!.drug_name}`,
+      detail: d.master!.timing_note!,
+      recommendation: 'แจ้งผู้ป่วยเรื่องเวลากินยา',
+      drugs: [d.icode],
+    }))
+}
+
+// ============ DUE (Drug Use Evaluation) ============
+export function buildDueAlerts(drugs: DrugEntry[]): ScreeningAlert[] {
+  return drugs
+    .filter((d) => d.master?.is_DUE)
+    .map((d) => ({
+      id: `due_${d.icode}`,
+      type: 'DUE' as const,
+      severity: 'orange' as const,
+      title: `📋 DUE: ${d.master!.drug_name} ต้องแนบใบ DUE`,
+      detail: 'ยานี้อยู่ในรายการ Drug Use Evaluation ต้องแนบแบบฟอร์มและปรึกษาอาจารย์แพทย์ภายใน 96 ชั่วโมง',
+      recommendation: 'กรอกใบ DUE + รอ approve อาจารย์ — หลัง 96 ชม. ห้องยาจะหยุดจ่ายอัตโนมัติ',
+      drugs: [d.icode],
+    }))
+}
+
+// ============ Tube feeding (no-crush warning) ============
+export function buildNoCrushAlerts(drugs: DrugEntry[], patient: PatientInput): ScreeningAlert[] {
+  if (!patient.tube_feeding) return []
+  return drugs
+    .filter((d) => d.master?.no_crush)
+    .map((d) => ({
+      id: `nocrush_${d.icode}`,
+      type: 'NO_CRUSH' as const,
+      severity: 'red' as const,
+      title: `⚠️ Tube feeding + SR tablet: ${d.master!.drug_name}`,
+      detail: 'ห้ามบดเม็ดยา SR/ER · ผู้ป่วยใช้ tube feeding — ต้อง consult แพทย์เปลี่ยนรูปแบบ',
+      recommendation: 'เปลี่ยนเป็น syrup หรือ immediate-release แทน',
+      drugs: [d.icode],
     }))
 }
 
@@ -440,12 +554,13 @@ export interface ScreenContext {
   labRules: LabRule[]
   diseaseRules: DiseaseRule[]
   drugMasters: DrugMaster[]
+  hadRules?: HadRule[]
 }
 
 export function runScreening(ctx: ScreenContext): ScreeningAlert[] {
   return [
     ...buildAllergyAlerts(ctx.drugs, ctx.patient.allergies),
-    ...buildHadAlerts(ctx.drugs),
+    ...buildHadAlerts(ctx.drugs, ctx.hadRules ?? []),
     ...buildG6pdAlerts(ctx.drugs, ctx.patient),
     ...buildDdiAlerts(ctx.drugs, ctx.ddiList),
     ...buildPregnancyAlerts(ctx.drugs, ctx.patient),
@@ -453,11 +568,15 @@ export function runScreening(ctx: ScreenContext): ScreeningAlert[] {
     ...buildBeersAlerts(ctx.drugs, ctx.patient),
     ...buildRenalAlerts(ctx.drugs, ctx.patient),
     ...buildDrpAlerts(ctx.drugs),
+    ...buildDupClassAlerts(ctx.drugs),
     ...buildLabAlerts(ctx.drugs, ctx.labRules, ctx.patient),
     ...buildDiseaseAlerts(ctx.drugs, ctx.patient.diseases, ctx.diseaseRules),
     ...buildLasaAlerts(ctx.drugs, ctx.drugMasters),
     ...buildLifestyleAlerts(ctx.drugs, ctx.patient),
     ...buildPediatricAlerts(ctx.drugs, ctx.patient),
+    ...buildTimingAlerts(ctx.drugs),
+    ...buildDueAlerts(ctx.drugs),
+    ...buildNoCrushAlerts(ctx.drugs, ctx.patient),
   ].sort((a, b) => sevRank(a.severity) - sevRank(b.severity))
 }
 

@@ -99,6 +99,12 @@ export function DiseaseAdmin() {
           <DialogHeader><DialogTitle>{edit?.id ? 'แก้ไขโรค' : 'เพิ่มโรคใหม่'}</DialogTitle></DialogHeader>
           {edit && (
             <div className="space-y-4">
+              <datalist id="dl-disease-key">
+                {['CKD', 'DM', 'HT', 'HF', 'CAD', 'AF', 'CVA', 'COPD', 'ASTHMA', 'G6PD', 'CIRRHOSIS', 'HEPATITIS', 'EPILEPSY', 'DEPRESSION', 'PREGNANCY', 'LACTATION', 'ELDERLY', 'PEDIATRIC', 'HIV', 'TB', 'GOUT', 'BPH', 'GLAUCOMA'].map((v) => <option key={v} value={v} />)}
+              </datalist>
+              <datalist id="dl-disease-labs">
+                {['SCr', 'eGFR', 'CrCl', 'BUN', 'K+', 'Na+', 'FBS', 'HbA1c', 'BW', 'Albumin', 'AST', 'ALT', 'INR', 'Hb', 'Hct', 'WBC', 'Plt'].map((v) => <option key={v} value={v} />)}
+              </datalist>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className="mb-1.5 flex items-center gap-2">
@@ -109,9 +115,10 @@ export function DiseaseAdmin() {
                     </HelpHint>
                   </Label>
                   <Input
+                    list="dl-disease-key"
                     value={edit.disease_key ?? edit.disease ?? ''}
                     onChange={(e) => setEdit({ ...edit, disease_key: e.target.value.toUpperCase(), disease: e.target.value.toUpperCase() })}
-                    placeholder="CKD"
+                    placeholder="ตัวอย่าง: CKD"
                     className="font-mono uppercase"
                   />
                 </div>
@@ -143,17 +150,19 @@ export function DiseaseAdmin() {
                 <div>
                   <Label className="mb-1.5">ค่าที่ต้องการ (required) — คั่นด้วย ,</Label>
                   <Input
+                    list="dl-disease-labs"
                     value={edit.required_labs ?? ''}
                     onChange={(e) => setEdit({ ...edit, required_labs: e.target.value })}
-                    placeholder="SCr, eGFR"
+                    placeholder="ตัวอย่าง: SCr, eGFR"
                   />
                 </div>
                 <div>
                   <Label className="mb-1.5">ค่าเสริม (optional)</Label>
                   <Input
+                    list="dl-disease-labs"
                     value={edit.optional_labs ?? ''}
                     onChange={(e) => setEdit({ ...edit, optional_labs: e.target.value })}
-                    placeholder="BUN"
+                    placeholder="ตัวอย่าง: BUN, Albumin"
                   />
                 </div>
               </div>

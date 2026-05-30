@@ -14,6 +14,13 @@ import { HelpHint } from '@/components/HelpHint'
 import { useDdiOverrides, useSaveDdi, useDelete, useDrugs } from '@/features/catalog/hooks'
 import type { DdiOverride } from '@/types/drug'
 
+const SEV_SHORT: Record<DdiOverride['severity'], string> = {
+  contraindicated: 'X',
+  major: 'M',
+  moderate: 'Mo',
+  minor: 'Mi',
+}
+
 export function DdiAdmin() {
   const { data = [] } = useDdiOverrides()
   const { data: drugs = [] } = useDrugs()
@@ -62,7 +69,9 @@ export function DdiAdmin() {
             <TableRow>
               <TableHead>ยา A</TableHead>
               <TableHead>ยา B</TableHead>
-              <TableHead>Severity</TableHead>
+              <TableHead className="w-[110px]">Severity</TableHead>
+              <TableHead className="w-[80px] text-center">Onset</TableHead>
+              <TableHead className="w-[70px] text-center">Doc</TableHead>
               <TableHead>Local note</TableHead>
               <TableHead className="text-right">จัดการ</TableHead>
             </TableRow>
@@ -74,8 +83,18 @@ export function DdiAdmin() {
                 <TableCell className="font-medium">{d.drug_b}</TableCell>
                 <TableCell>
                   <Badge variant={d.severity === 'contraindicated' || d.severity === 'major' ? 'red' : d.severity === 'moderate' ? 'orange' : 'yellow'}>
-                    {d.severity}
+                    {SEV_SHORT[d.severity]}
                   </Badge>
+                </TableCell>
+                <TableCell className="text-center">
+                  {d.onset
+                    ? <Badge variant={d.onset === 'R' ? 'orange' : 'blue'} className="text-[10px]">{d.onset}</Badge>
+                    : <span className="text-xs text-muted-foreground">-</span>}
+                </TableCell>
+                <TableCell className="text-center">
+                  {d.documentation
+                    ? <Badge variant="outline" className="text-[10px] font-mono">{d.documentation}</Badge>
+                    : <span className="text-xs text-muted-foreground">-</span>}
                 </TableCell>
                 <TableCell className="max-w-xs truncate text-xs">{d.local_note ?? '-'}</TableCell>
                 <TableCell className="text-right">
@@ -121,46 +140,84 @@ export function DdiAdmin() {
                   <div className="text-xs text-muted-foreground mt-1">ค่าปัจจุบัน: <b>{edit.drug_b || '-'}</b> · <button type="button" onClick={() => { const v = prompt('กรอกชื่อยา/generic ที่จะเทียบ', edit.drug_b) ?? edit.drug_b; setEdit({ ...edit, drug_b: v }) }} className="text-primary underline">แก้ด้วยตนเอง</button></div>
                 </div>
               </div>
-              <div>
-                <Label className="mb-1.5 flex items-center gap-2">
-                  Severity
-                  <HelpHint title="Severity">
-                    <b>contraindicated</b> = ห้ามใช้ร่วมเด็ดขาด<br />
-                    <b>major</b> = ร้ายแรง ระวังเสมอ<br />
-                    <b>moderate</b> = ปานกลาง ปรับ dose/monitor<br />
-                    <b>minor</b> = เล็กน้อย
-                  </HelpHint>
-                </Label>
-                <Select value={edit.severity} onValueChange={(v) => setEdit({ ...edit, severity: v as DdiOverride['severity'] })}>
-                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="contraindicated">contraindicated (ห้ามใช้)</SelectItem>
-                    <SelectItem value="major">major (รุนแรง)</SelectItem>
-                    <SelectItem value="moderate">moderate (ปานกลาง)</SelectItem>
-                    <SelectItem value="minor">minor (เล็กน้อย)</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <Label className="mb-1.5 flex items-center gap-2">
+                    Severity
+                    <HelpHint title="Severity">
+                      <b>M</b> = Major (รุนแรง)<br />
+                      <b>Mo</b> = Moderate (ปานกลาง)<br />
+                      <b>Mi</b> = Minor (เล็กน้อย)<br />
+                      <b>X</b> = Contraindicated (ห้ามใช้)
+                    </HelpHint>
+                  </Label>
+                  <Select value={edit.severity} onValueChange={(v) => setEdit({ ...edit, severity: v as DdiOverride['severity'] })}>
+                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="contraindicated">X — Contraindicated (ห้ามใช้)</SelectItem>
+                      <SelectItem value="major">M — Major (รุนแรง)</SelectItem>
+                      <SelectItem value="moderate">Mo — Moderate (ปานกลาง)</SelectItem>
+                      <SelectItem value="minor">Mi — Minor (เล็กน้อย)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="mb-1.5 flex items-center gap-2">
+                    Onset
+                    <HelpHint title="Onset (เวลาที่เกิดผล)">
+                      <b>R</b> = Rapid — เกิดเร็วภายใน 24 ชม.<br />
+                      <b>D</b> = Delayed — ใช้เวลาหลายวันจนถึงหลายสัปดาห์
+                    </HelpHint>
+                  </Label>
+                  <Select value={edit.onset ?? '_'} onValueChange={(v) => setEdit({ ...edit, onset: (v === '_' ? undefined : v) as DdiOverride['onset'] })}>
+                    <SelectTrigger className="w-full"><SelectValue placeholder="-" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_">-</SelectItem>
+                      <SelectItem value="R">R — Rapid (&lt;24 ชม.)</SelectItem>
+                      <SelectItem value="D">D — Delayed (วัน–สัปดาห์)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="mb-1.5 flex items-center gap-2">
+                    Documentation
+                    <HelpHint title="Documentation (หลักฐานทางวิชาการ)">
+                      <b>1</b> = Established — มีการวิจัยยืนยัน<br />
+                      <b>2</b> = Probable — เป็นไปได้สูง มีข้อมูลรายงาน แต่ยังไม่พิสูจน์ทางคลินิก<br />
+                      <b>3</b> = Suspected — มีรายงาน ยังต้องการข้อมูลเพิ่มเติม
+                    </HelpHint>
+                  </Label>
+                  <Select value={edit.documentation ?? '_'} onValueChange={(v) => setEdit({ ...edit, documentation: (v === '_' ? undefined : v) as DdiOverride['documentation'] })}>
+                    <SelectTrigger className="w-full"><SelectValue placeholder="-" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_">-</SelectItem>
+                      <SelectItem value="1">1 — Established</SelectItem>
+                      <SelectItem value="2">2 — Probable</SelectItem>
+                      <SelectItem value="3">3 — Suspected</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div>
                 <Label className="mb-1.5 flex items-center gap-2">
                   Mechanism (ไม่บังคับ)
-                  <HelpHint title="Mechanism">กลไกทางเภสัชวิทยา เช่น "CYP3A4 inhibition", "Additive QT prolongation"</HelpHint>
+                  <HelpHint title="Mechanism">กลไกทางเภสัชวิทยา</HelpHint>
                 </Label>
-                <Input value={edit.mechanism ?? ''} onChange={(e) => setEdit({ ...edit, mechanism: e.target.value })} />
+                <Input value={edit.mechanism ?? ''} onChange={(e) => setEdit({ ...edit, mechanism: e.target.value })} placeholder="ตัวอย่าง: CYP3A4 inhibition · Additive QT prolongation · P-gp induction" />
               </div>
               <div>
                 <Label className="mb-1.5 flex items-center gap-2">
                   Local note (โน้ตของ รพ.รือเสาะ)
                   <HelpHint title="Local note">หมายเหตุของโรงพยาบาล — จะแสดงใน alert ตอนคัดกรอง</HelpHint>
                 </Label>
-                <Textarea value={edit.local_note ?? ''} onChange={(e) => setEdit({ ...edit, local_note: e.target.value })} rows={2} placeholder="เพิ่มเสี่ยงเลือดออก GI สูงมาก ถ้าจำเป็นต้องใช้ร่วม ติดตาม INR ถี่ขึ้น" />
+                <Textarea value={edit.local_note ?? ''} onChange={(e) => setEdit({ ...edit, local_note: e.target.value })} rows={2} placeholder="ตัวอย่าง: เสี่ยงเลือดออก GI สูง · ถ้าจำเป็นต้องใช้ร่วม ติดตาม INR สัปดาห์ละครั้ง 2-4 สัปดาห์" />
               </div>
               <div>
                 <Label className="mb-1.5 flex items-center gap-2">
                   คำแนะนำ
-                  <HelpHint title="Recommendation">วิธีจัดการ เช่น "เปลี่ยนเป็น Paracetamol แทน"</HelpHint>
+                  <HelpHint title="Recommendation">วิธีจัดการ — จะแสดงใน alert</HelpHint>
                 </Label>
-                <Textarea value={edit.recommendation ?? ''} onChange={(e) => setEdit({ ...edit, recommendation: e.target.value })} rows={2} />
+                <Textarea value={edit.recommendation ?? ''} onChange={(e) => setEdit({ ...edit, recommendation: e.target.value })} rows={2} placeholder="ตัวอย่าง: เปลี่ยนเป็น Paracetamol · ลด Warfarin 25-50% · เว้น 2 ชม. ก่อน/หลังกิน" />
               </div>
             </div>
           )}

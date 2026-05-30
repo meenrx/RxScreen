@@ -1,4 +1,4 @@
-import type { DdiOverride, DiseaseRule, DrugMaster, LabRule } from './drug'
+import type { DdiOverride, DiseaseRule, DrugMaster, HadRule, LabRule } from './drug'
 
 export interface PatientInput {
   hn?: string
@@ -17,6 +17,8 @@ export interface PatientInput {
   g6pd?: boolean
   smoking?: boolean
   alcohol?: boolean
+  /** ผู้ป่วยให้อาหารทางสาย (NG/PEG) — เตือนเรื่อง SR/ER no-crush */
+  tube_feeding?: boolean
   diseases?: string[]
   /** allergy → drug name, class, หรือ allergen เช่น "Penicillin", "Sulfa" */
   allergies?: string[]
@@ -36,6 +38,7 @@ export type AlertType =
   | 'DDI' | 'LAB' | 'DISEASE' | 'DRP' | 'RENAL' | 'PED'
   | 'ALLERGY' | 'HAD' | 'LASA' | 'PREG' | 'LACT' | 'BEERS' | 'G6PD'
   | 'FOOD' | 'SMOKING' | 'ALCOHOL' | 'TDM'
+  | 'TIMING' | 'DUE' | 'NO_CRUSH'
 
 export interface ScreeningAlert {
   id: string
@@ -45,7 +48,7 @@ export interface ScreeningAlert {
   detail: string
   drugs?: string[]
   recommendation?: string
-  source?: DdiOverride | DiseaseRule | LabRule | DrugMaster
+  source?: DdiOverride | DiseaseRule | LabRule | DrugMaster | HadRule
 }
 
 export interface ScreeningResult {

@@ -28,6 +28,9 @@ const labelByType: Record<ScreeningAlert['type'], string> = {
   SMOKING: 'บุหรี่',
   ALCOHOL: 'แอลกอฮอล์',
   TDM: 'TDM',
+  TIMING: 'เวลากิน',
+  DUE: 'DUE',
+  NO_CRUSH: 'ห้ามบด',
 }
 
 export function AlertList({ alerts }: { alerts: ScreeningAlert[] }) {

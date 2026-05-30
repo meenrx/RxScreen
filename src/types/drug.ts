@@ -40,6 +40,56 @@ export interface DrugMaster {
   food_interaction?: string
   /** Drug-Lab Test Interference เช่น "Phenytoin → false ↓ Free T4", "Vitamin C → false ↓ glucose" */
   lab_interference?: string
+
+  // ===== ฟิลด์จาก Sheet "บัญชียา" (Hospital drug account) =====
+  /** หน่วยจ่าย/บรรจุ เช่น เม็ด, ขวด (60 ml.), ซอง, Amp., Vial */
+  pack_unit?: string
+  /** Dosage form ภาษาอังกฤษจาก sheet เช่น TABLETS, INJECTIONS, SYRUPS */
+  dosage_form?: string
+  /** หมวดบัญชียาโรงพยาบาล เช่น ก, ข, ค, ง */
+  drug_account?: string
+  /** หมวดยาเชิงเภสัชวิทยา เช่น ANTIHISTAMINES, PENICILLINS — ใช้คู่กับ drug_class */
+  drug_category?: string
+  /** ข้อบ่งใช้/therapeutic use ภาษาไทย */
+  therapeutic?: string
+  /** ราคาทุน (บาท/หน่วย) */
+  unit_cost?: number
+  /** ราคาขาย (บาท/หน่วย) */
+  unit_price?: number
+
+  // ===== ฟิลด์ clinical screening (จากแนวทางสุโขทัย/รือเสาะ) =====
+  /** ยาที่ต้อง Drug Use Evaluation (DUE) — กรอกใบ DUE + ปรึกษาอาจารย์ 96 ชม. */
+  is_DUE?: boolean
+  /** ห้ามบดเม็ดยา (SR/ER tablets) — ต้องปรึกษาแพทย์ถ้าผู้ป่วยใช้ tube feeding */
+  no_crush?: boolean
+  /** คำเตือนเรื่องเวลากิน เช่น "ก่อนอาหาร 1 ชม.", "ก่อนอาหาร 30 นาที" */
+  timing_note?: string
+  /** Class keys สำหรับ duplicate therapy detection — เช่น "ACEI", "ARB", "BB", "STATIN", "NSAID" */
+  dup_class?: string[]
+  updatedAt?: Date
+}
+
+/** HAD_RULES — กฎ High Alert Drug รายละเอียดที่เภสัชกรต้องเตือนเสมอ */
+export interface HadRule {
+  id?: string
+  /** key เช่น icode หรือ generic name lowercase */
+  drug_key: string
+  /** ชื่อยาแสดงผล */
+  drug_name: string
+  /** Max dose เช่น "50 mcg/kg/min" */
+  max_dose?: string
+  /** Max rate เช่น "30 mg/min" */
+  max_rate?: string
+  /** Max concentration เช่น "5 mg/ml" */
+  max_conc?: string
+  /** Dilution requirements เช่น "Dilute ใน D5W เท่านั้น" */
+  dilution?: string
+  /** Route restriction เช่น "ห้ามให้ IV push" */
+  route_note?: string
+  /** หมายเหตุเพิ่มเติม / full text */
+  full_note?: string
+  /** Antidote ถ้ามี */
+  antidote?: string
   updatedAt?: Date
 }
 
@@ -82,6 +132,10 @@ export interface DdiOverride {
   drug_a: string
   drug_b: string
   severity: 'major' | 'moderate' | 'minor' | 'contraindicated'
+  /** Onset ของปฏิกิริยา — R = Rapid (<24h), D = Delayed (วัน-สัปดาห์) */
+  onset?: 'R' | 'D'
+  /** Documentation level — 1=Established (มีวิจัยยืนยัน), 2=Probable (มีรายงาน), 3=Suspected */
+  documentation?: '1' | '2' | '3'
   mechanism?: string
   local_note?: string
   recommendation?: string

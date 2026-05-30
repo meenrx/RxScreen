@@ -12,6 +12,114 @@ import { Badge } from '@/components/ui/badge'
 import { useDrugs, useSaveDrug, useDelete } from '@/features/catalog/hooks'
 import type { DrugMaster } from '@/types/drug'
 
+// ====== ตัวเลือก dropdown / datalist (ขยายได้เรื่อยๆ) ======
+const DOSAGE_FORM_OPTIONS = [
+  'TABLETS', 'CAPSULES', 'SYRUPS', 'SUSPENSIONS', 'POWDERS',
+  'INJECTIONS', 'AMPOULE', 'VIAL', 'INTRAVENOUS SOLUTION', 'INTRAVENOUS SOLOTION',
+  'SOLUTIONS', 'LOTION', 'CREAM', 'OINTMENT', 'GEL',
+  'EYE DROPS', 'EAR DROPS', 'NASAL SPRAY', 'INHALER', 'NEBULIZER',
+  'SUPPOSITORY', 'PATCH', 'LOZENGES', 'OTHER',
+]
+
+const PACK_UNIT_OPTIONS = [
+  'เม็ด', 'แคปซูล', 'ซอง', 'ขวด', 'ขวด (60 ml.)', 'ขวด (240 ml.)',
+  'หลอด', 'Amp.', 'Amp. (1 ml.)', 'Vial', 'ถุง', 'ถุง (500 ml.)', 'ถุง (1000 ml.)',
+  'ครีม (15 g.)', 'ครีม (5 g.)', 'แผง', 'กล่อง', 'กระป๋อง',
+]
+
+const DOSE_UNIT_OPTIONS = [
+  'tab', 'cap', 'ml', 'mg', 'g', 'mcg', 'unit', 'IU',
+  'drop', 'puff', 'spray', 'patch', 'supp.',
+]
+
+const DRUG_CATEGORY_OPTIONS = [
+  'ANTIHISTAMINES', 'ANTIBIOTICS', 'PENICILLINS', 'CEPHALOSPORINS', 'MACROLIDES',
+  'ANALGESIC AND', 'ANTI-INFLAMMATORY', 'ANTIPYRETIC',
+  'ANTIHYPERTENSIVE', 'ACEI', 'ARB', 'BETA-BLOCKER', 'CCB', 'DIURETICS',
+  'ANTIDIABETIC', 'INSULIN', 'STATIN', 'ANTICOAGULANT', 'ANTIPLATELET',
+  'PPI', 'H2-BLOCKER', 'ANTACID', 'ANTIEMETIC', 'LAXATIVE',
+  'BRONCHODILATOR', 'CORTICOSTEROID', 'ANXIOLYTICS , SEDATIVE',
+  'ANTIPSYCHOTIC', 'ANTIDEPRESSANT', 'ANTIEPILEPTIC',
+  'CARDIAC STIMULANTS', 'ANTIDOTE', 'ANTITUSSIVE', 'EXPECTORANT',
+  'ANTIMALARIALS', 'ANTHELMINTICS', 'ANTIVIRAL', 'ANTIFUNGAL',
+  'GASTROINTESTINAL DRUG', 'ANTISPASMODICS AND', 'ANTISEPTIC',
+  'mineral supplements', 'VITAMIN', 'ELECTROLYTE',
+  'ANTI-GUOT PREPARATION', 'SYSTEMIC', 'sulfonamile',
+  'INTRAVENOUS SOLUTION', 'HORMONE', 'CONTRACEPTIVE',
+]
+
+const ALLERGEN_OPTIONS = [
+  'Penicillin', 'Beta-lactam', 'Cephalosporin', 'Carbapenem', 'Sulfa', 'Sulfonamide',
+  'NSAID', 'Aspirin', 'Macrolide', 'Quinolone', 'Tetracycline',
+  'Opioid', 'Codeine', 'Morphine', 'Latex', 'Iodine', 'Egg', 'Soy',
+]
+
+// ===== Resizable column widths (persisted in localStorage) =====
+// "name" คอลัมน์ flex รับพื้นที่เหลือ → ชื่อยาเต็มสุดเสมอ
+type ColKey = 'action' | 'icode' | 'account' | 'category' | 'price' | 'tags'
+
+const DEFAULT_WIDTHS: Record<ColKey, number> = {
+  action: 68, icode: 80, account: 52, category: 200, price: 90, tags: 120,
+}
+const STORAGE_KEY = 'drugMaster.colWidths.v5'
+const MIN_WIDTH = 40
+
+function useColWidths() {
+  const [widths, setWidths] = useState<Record<ColKey, number>>(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY)
+      if (raw) return { ...DEFAULT_WIDTHS, ...JSON.parse(raw) }
+    } catch { /* ignore */ }
+    return DEFAULT_WIDTHS
+  })
+
+  function setWidth(key: ColKey, w: number) {
+    setWidths((prev) => {
+      const next = { ...prev, [key]: Math.max(MIN_WIDTH, Math.round(w)) }
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)) } catch { /* ignore */ }
+      return next
+    })
+  }
+
+  function reset() {
+    setWidths(DEFAULT_WIDTHS)
+    try { localStorage.removeItem(STORAGE_KEY) } catch { /* ignore */ }
+  }
+
+  return { widths, setWidth, reset }
+}
+
+function ResizeHandle({ width, onResize }: { width: number; onResize: (w: number) => void }) {
+  function onMouseDown(e: React.MouseEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    const startX = e.clientX
+    const startW = width
+    function onMove(ev: MouseEvent) {
+      onResize(startW + (ev.clientX - startX))
+    }
+    function onUp() {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+  }
+  return (
+    <span
+      role="separator"
+      aria-orientation="vertical"
+      onMouseDown={onMouseDown}
+      className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-cyan-400/60 active:bg-cyan-500/80 transition-colors z-10"
+      title="ลากเพื่อปรับขนาด · จำค่าอัตโนมัติ"
+    />
+  )
+}
+
 export function DrugMasterAdmin() {
   const { data = [], isLoading } = useDrugs()
   const save = useSaveDrug()
@@ -27,9 +135,13 @@ export function DrugMasterAdmin() {
         d.icode.toLowerCase().includes(s)
         || d.drug_name.toLowerCase().includes(s)
         || (d.generic_name?.toLowerCase().includes(s) ?? false)
-        || (d.drug_class?.toLowerCase().includes(s) ?? false),
+        || (d.drug_class?.toLowerCase().includes(s) ?? false)
+        || (d.drug_category?.toLowerCase().includes(s) ?? false)
+        || (d.therapeutic?.toLowerCase().includes(s) ?? false),
     )
   }, [data, search])
+
+  const { widths, setWidth, reset: resetWidths } = useColWidths()
 
   function openNew() {
     setEdit({ icode: '', drug_name: '', active: true })
@@ -51,82 +163,161 @@ export function DrugMasterAdmin() {
         <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
           <div className="relative flex-1">
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-            <Input placeholder="ค้นหา icode/ชื่อยา/generic/class" className="pl-8 h-10" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <Input placeholder="ค้นหา icode/ชื่อยา/generic/หมวด/ข้อบ่งใช้" className="pl-8 h-10" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
+          <Button variant="outline" size="sm" onClick={resetWidths} title="คืนค่าความกว้างคอลัมน์เริ่มต้น">รีเซ็ตคอลัมน์</Button>
           <Button onClick={openNew}><Plus className="size-4" /> เพิ่มยา</Button>
         </div>
-        <div className="text-xs text-muted-foreground">{filtered.length} รายการ {isLoading && '(กำลังโหลด...)'}</div>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>icode</TableHead>
-              <TableHead>ชื่อยา</TableHead>
-              <TableHead>Generic</TableHead>
-              <TableHead>Class</TableHead>
-              <TableHead>Tags</TableHead>
-              <TableHead className="text-right">จัดการ</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filtered.map((d) => (
-              <TableRow key={d.id}>
-                <TableCell className="font-mono text-xs">{d.icode}</TableCell>
-                <TableCell className="font-medium">{d.drug_name}</TableCell>
-                <TableCell className="text-sm">{d.generic_name ?? '-'}</TableCell>
-                <TableCell className="text-sm">{d.drug_class ?? '-'}</TableCell>
-                <TableCell>
-                  <div className="flex flex-wrap gap-1">
-                    {d.is_HAD && <span className="had-badge">HAD</span>}
-                    {d.lasa_with && d.lasa_with.length > 0 && <span className="lasa-badge">LASA</span>}
-                    {d.pregnancy_category && <Badge variant={d.pregnancy_category === 'X' ? 'red' : d.pregnancy_category === 'D' ? 'orange' : 'yellow'} className="text-[10px]">P:{d.pregnancy_category}</Badge>}
-                    {d.beers_avoid_elderly && <Badge variant="orange" className="text-[10px]">Beers</Badge>}
-                    {d.g6pd_unsafe && <Badge variant="red" className="text-[10px]">G6PD</Badge>}
-                  </div>
-                </TableCell>
-                <TableCell className="text-right">
-                  <Button variant="ghost" size="icon" onClick={() => openEdit(d)}><Pencil className="size-4" /></Button>
-                  <Button variant="ghost" size="icon" onClick={() => { if (confirm('ลบยานี้?')) del.mutate(d.id!) }}><Trash2 className="size-4 text-red-500" /></Button>
-                </TableCell>
+        <div className="text-xs text-muted-foreground">{filtered.length} รายการ {isLoading && '(กำลังโหลด...)'} · ลากเส้นแบ่งคอลัมน์เพื่อปรับขนาด</div>
+
+        <div className="rounded-lg border">
+          <Table style={{ tableLayout: 'fixed' }}>
+            <TableHeader className="bg-muted/50 sticky top-0">
+              <TableRow className="text-sm">
+                <TableHead style={{ width: widths.action }} className="relative text-center">
+                  จัดการ
+                  <ResizeHandle width={widths.action} onResize={(w) => setWidth('action', w)} />
+                </TableHead>
+                <TableHead style={{ width: widths.icode }} className="relative">
+                  icode
+                  <ResizeHandle width={widths.icode} onResize={(w) => setWidth('icode', w)} />
+                </TableHead>
+                <TableHead className="relative">ยา</TableHead>
+                <TableHead style={{ width: widths.account }} className="relative text-center">
+                  บัญชี
+                  <ResizeHandle width={widths.account} onResize={(w) => setWidth('account', w)} />
+                </TableHead>
+                <TableHead style={{ width: widths.category }} className="relative">
+                  หมวด · ข้อบ่งใช้
+                  <ResizeHandle width={widths.category} onResize={(w) => setWidth('category', w)} />
+                </TableHead>
+                <TableHead style={{ width: widths.price }} className="relative text-right">
+                  ทุน / ขาย
+                  <ResizeHandle width={widths.price} onResize={(w) => setWidth('price', w)} />
+                </TableHead>
+                <TableHead style={{ width: widths.tags }} className="relative">
+                  Tags
+                </TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {filtered.map((d) => (
+                <TableRow key={d.id}>
+                  <TableCell style={{ width: widths.action }} className="py-2 overflow-hidden">
+                    <div className="flex gap-0">
+                      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => openEdit(d)}>
+                        <Pencil className="size-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => { if (confirm('ลบยานี้?')) del.mutate(d.id!) }}>
+                        <Trash2 className="size-4 text-red-500" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                  <TableCell style={{ width: widths.icode }} className="font-mono text-sm py-2 truncate">{d.icode}</TableCell>
+                  <TableCell className="py-2 overflow-hidden">
+                    <div className="font-semibold text-base leading-tight truncate" title={d.drug_name}>{d.drug_name}</div>
+                    {d.generic_name && <div className="text-xs text-muted-foreground leading-tight mt-0.5 truncate" title={d.generic_name}>{d.generic_name}</div>}
+                    <div className="text-xs text-muted-foreground leading-tight mt-0.5 truncate">
+                      {[d.strength, d.dosage_form ?? d.form, d.pack_unit ?? d.unit].filter(Boolean).join(' · ') || '-'}
+                    </div>
+                  </TableCell>
+                  <TableCell style={{ width: widths.account }} className="text-center py-2 overflow-hidden">
+                    {d.drug_account ? <Badge variant="outline" className="text-xs px-2">{d.drug_account}</Badge> : <span className="text-muted-foreground">-</span>}
+                  </TableCell>
+                  <TableCell style={{ width: widths.category }} className="py-2 overflow-hidden">
+                    {(d.drug_category ?? d.drug_class) && <div className="text-sm font-medium leading-tight truncate" title={d.drug_category ?? d.drug_class}>{d.drug_category ?? d.drug_class}</div>}
+                    {d.therapeutic && <div className="text-xs text-muted-foreground leading-snug line-clamp-2 mt-0.5" title={d.therapeutic}>{d.therapeutic}</div>}
+                  </TableCell>
+                  <TableCell style={{ width: widths.price }} className="text-right tabular-nums py-2 overflow-hidden">
+                    {d.unit_cost != null && <div className="text-xs text-muted-foreground leading-tight">฿{d.unit_cost.toLocaleString()}</div>}
+                    {d.unit_price != null && <div className="font-semibold text-sm leading-tight">฿{d.unit_price.toLocaleString()}</div>}
+                    {d.unit_cost == null && d.unit_price == null && <span className="text-muted-foreground">-</span>}
+                  </TableCell>
+                  <TableCell style={{ width: widths.tags }} className="py-2 overflow-hidden">
+                    <div className="flex flex-wrap gap-0.5">
+                      {d.is_HAD && <span className="had-badge text-[10px] px-1.5">HAD</span>}
+                      {d.lasa_with && d.lasa_with.length > 0 && <span className="lasa-badge text-[10px] px-1.5">LASA</span>}
+                      {d.pregnancy_category && <Badge variant={d.pregnancy_category === 'X' ? 'red' : d.pregnancy_category === 'D' ? 'orange' : 'yellow'} className="text-[10px] px-1.5">P:{d.pregnancy_category}</Badge>}
+                      {d.beers_avoid_elderly && <Badge variant="orange" className="text-[10px] px-1.5">Beers</Badge>}
+                      {d.g6pd_unsafe && <Badge variant="red" className="text-[10px] px-1.5">G6PD</Badge>}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       </CardContent>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-6xl max-h-[95vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{edit?.id ? 'แก้ไขยา' : 'เพิ่มยาใหม่'}</DialogTitle>
           </DialogHeader>
           {edit && (
-            <div className="space-y-4">
-              {/* Basic */}
-              <section className="grid grid-cols-2 gap-3">
-                <div><Label className="mb-1.5">icode *</Label><Input value={edit.icode} onChange={(e) => setEdit({ ...edit, icode: e.target.value })} /></div>
-                <div><Label className="mb-1.5">หน่วย</Label><Input value={edit.unit ?? ''} onChange={(e) => setEdit({ ...edit, unit: e.target.value })} placeholder="tab, cap, ml" /></div>
-                <div className="col-span-2"><Label className="mb-1.5">ชื่อยา + strength *</Label><Input value={edit.drug_name} onChange={(e) => setEdit({ ...edit, drug_name: e.target.value })} placeholder="Amlodipine 5 mg tab" /></div>
-                <div><Label className="mb-1.5">Generic name</Label><Input value={edit.generic_name ?? ''} onChange={(e) => setEdit({ ...edit, generic_name: e.target.value })} /></div>
-                <div><Label className="mb-1.5">Drug class</Label><Input value={edit.drug_class ?? ''} onChange={(e) => setEdit({ ...edit, drug_class: e.target.value })} placeholder="ACEI, BB, CCB" /></div>
-              </section>
+            <div className="space-y-3 text-sm">
+              {/* datalist สำหรับ autocomplete (allow free text) */}
+              <datalist id="dl-pack-unit">
+                {PACK_UNIT_OPTIONS.map((v) => <option key={v} value={v} />)}
+              </datalist>
+              <datalist id="dl-dose-unit">
+                {DOSE_UNIT_OPTIONS.map((v) => <option key={v} value={v} />)}
+              </datalist>
+              <datalist id="dl-drug-category">
+                {DRUG_CATEGORY_OPTIONS.map((v) => <option key={v} value={v} />)}
+              </datalist>
+              <datalist id="dl-allergens">
+                {ALLERGEN_OPTIONS.map((v) => <option key={v} value={v} />)}
+              </datalist>
 
-              {/* Safety flags */}
-              <section className="space-y-2">
-                <Label className="text-base">Safety flags</Label>
-                <div className="flex flex-wrap gap-2">
-                  <ToggleChip on={edit.is_HAD} onChange={(v) => setEdit({ ...edit, is_HAD: v })}>🔴 HAD (High Alert)</ToggleChip>
-                  <ToggleChip on={edit.beers_avoid_elderly} onChange={(v) => setEdit({ ...edit, beers_avoid_elderly: v })}>👴 Beers (≥65)</ToggleChip>
-                  <ToggleChip on={edit.g6pd_unsafe} onChange={(v) => setEdit({ ...edit, g6pd_unsafe: v })}>🩸 G6PD unsafe</ToggleChip>
-                  <ToggleChip on={edit.lactation_safe === false} onChange={(v) => setEdit({ ...edit, lactation_safe: v ? false : undefined })}>🤱 ห้ามให้นมบุตร</ToggleChip>
-                  <ToggleChip on={edit.requires_ibw} onChange={(v) => setEdit({ ...edit, requires_ibw: v })}>💪 ใช้ IBW คำนวณ dose</ToggleChip>
-                </div>
-              </section>
-
-              <section className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="mb-1.5">Pregnancy category</Label>
-                  <Select value={edit.pregnancy_category ?? ''} onValueChange={(v) => setEdit({ ...edit, pregnancy_category: (v || undefined) as DrugMaster['pregnancy_category'] })}>
-                    <SelectTrigger className="w-full"><SelectValue placeholder="-" /></SelectTrigger>
+              {/* Row 1: ข้อมูลหลัก */}
+              <div className="grid grid-cols-12 gap-2">
+                <div className="col-span-2"><Label className="mb-1 text-xs">icode *</Label><Input className="h-9" value={edit.icode} onChange={(e) => setEdit({ ...edit, icode: e.target.value })} placeholder="1000002" /></div>
+                <div className="col-span-4"><Label className="mb-1 text-xs">ชื่อยา *</Label><Input className="h-9" value={edit.drug_name} onChange={(e) => setEdit({ ...edit, drug_name: e.target.value })} placeholder="CPM tab. 4 mg." /></div>
+                <div className="col-span-3"><Label className="mb-1 text-xs">Generic</Label><Input className="h-9" value={edit.generic_name ?? ''} onChange={(e) => setEdit({ ...edit, generic_name: e.target.value })} placeholder="chlorpheniramine" /></div>
+                <div className="col-span-2"><Label className="mb-1 text-xs">Strength</Label><Input className="h-9" value={edit.strength ?? ''} onChange={(e) => setEdit({ ...edit, strength: e.target.value })} placeholder="4 mg." /></div>
+                <div className="col-span-1">
+                  <Label className="mb-1 text-xs">บัญชี</Label>
+                  <Select value={edit.drug_account ?? '_'} onValueChange={(v) => setEdit({ ...edit, drug_account: v === '_' ? undefined : v })}>
+                    <SelectTrigger className="w-full h-9 text-center"><SelectValue placeholder="-" /></SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="_">-</SelectItem>
+                      <SelectItem value="ก">ก</SelectItem>
+                      <SelectItem value="ข">ข</SelectItem>
+                      <SelectItem value="ค">ค</SelectItem>
+                      <SelectItem value="ง">ง</SelectItem>
+                      <SelectItem value="จ">จ</SelectItem>
+                      <SelectItem value="ฉ">ฉ</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Row 2: รูปแบบยา + ราคา + pregnancy */}
+              <div className="grid grid-cols-12 gap-2">
+                <div className="col-span-2">
+                  <Label className="mb-1 text-xs">Dosage form</Label>
+                  <Select value={edit.dosage_form ?? edit.form ?? '_'} onValueChange={(v) => setEdit({ ...edit, dosage_form: v === '_' ? undefined : v, form: v === '_' ? undefined : v })}>
+                    <SelectTrigger className="w-full h-9"><SelectValue placeholder="-" /></SelectTrigger>
+                    <SelectContent className="max-h-72">
+                      <SelectItem value="_">-</SelectItem>
+                      {DOSAGE_FORM_OPTIONS.map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="col-span-2"><Label className="mb-1 text-xs">หน่วยจ่าย</Label><Input list="dl-pack-unit" className="h-9" value={edit.pack_unit ?? ''} onChange={(e) => setEdit({ ...edit, pack_unit: e.target.value })} placeholder="เช่น เม็ด, ขวด (60 ml.)" /></div>
+                <div className="col-span-1"><Label className="mb-1 text-xs">Unit (dose)</Label><Input list="dl-dose-unit" className="h-9" value={edit.unit ?? ''} onChange={(e) => setEdit({ ...edit, unit: e.target.value })} placeholder="tab" /></div>
+                <div className="col-span-3"><Label className="mb-1 text-xs">หมวดยา (drug_category)</Label><Input list="dl-drug-category" className="h-9" value={edit.drug_category ?? edit.drug_class ?? ''} onChange={(e) => setEdit({ ...edit, drug_category: e.target.value, drug_class: e.target.value })} placeholder="เช่น ANTIHISTAMINES" /></div>
+                <div className="col-span-2 grid grid-cols-2 gap-1">
+                  <div><Label className="mb-1 text-xs">ราคาทุน</Label><Input className="h-9 text-right tabular-nums" type="number" step="0.01" value={edit.unit_cost ?? ''} onChange={(e) => setEdit({ ...edit, unit_cost: e.target.value === '' ? undefined : Number(e.target.value) })} placeholder="0.05" /></div>
+                  <div><Label className="mb-1 text-xs">ราคาขาย</Label><Input className="h-9 text-right tabular-nums" type="number" step="0.01" value={edit.unit_price ?? ''} onChange={(e) => setEdit({ ...edit, unit_price: e.target.value === '' ? undefined : Number(e.target.value) })} placeholder="0.5" /></div>
+                </div>
+                <div className="col-span-2">
+                  <Label className="mb-1 text-xs">Pregnancy</Label>
+                  <Select value={edit.pregnancy_category ?? '_'} onValueChange={(v) => setEdit({ ...edit, pregnancy_category: (v === '_' ? undefined : v) as DrugMaster['pregnancy_category'] })}>
+                    <SelectTrigger className="w-full h-9"><SelectValue placeholder="-" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_">-</SelectItem>
                       <SelectItem value="A">A (ปลอดภัย)</SelectItem>
                       <SelectItem value="B">B (ค่อนข้างปลอดภัย)</SelectItem>
                       <SelectItem value="C">C (ระวัง)</SelectItem>
@@ -135,23 +326,57 @@ export function DrugMasterAdmin() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div><Label className="mb-1.5">LASA pairs (icode คั่นด้วย ,)</Label><Input value={edit.lasa_with?.join(', ') ?? ''} onChange={(e) => setEdit({ ...edit, lasa_with: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} placeholder="HYDROX, HYDROCH" /></div>
-              </section>
+              </div>
 
-              <section className="grid grid-cols-2 gap-3">
-                <div><Label className="mb-1.5">Allergens (สำหรับเช็คแพ้ยา, คั่นด้วย ,)</Label><Input value={edit.allergens?.join(', ') ?? ''} onChange={(e) => setEdit({ ...edit, allergens: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} placeholder="Penicillin, Beta-lactam" /></div>
-                <div><Label className="mb-1.5">Cross-reactivity (คั่นด้วย ,)</Label><Input value={edit.cross_react?.join(', ') ?? ''} onChange={(e) => setEdit({ ...edit, cross_react: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} placeholder="Cephalosporin, Carbapenem" /></div>
-              </section>
+              {/* Row 3: ข้อบ่งใช้ */}
+              <div>
+                <Label className="mb-1 text-xs">ข้อบ่งใช้ (Therapeutic)</Label>
+                <Textarea rows={2} value={edit.therapeutic ?? ''} onChange={(e) => setEdit({ ...edit, therapeutic: e.target.value })} placeholder="ตัวอย่าง: ยาแก้แพ้ ลดน้ำมูก แก้คัน ลมพิษ" />
+              </div>
 
-              <section className="grid grid-cols-1 gap-2">
-                <div><Label className="mb-1.5">🍽 Food interaction</Label><Textarea value={edit.food_interaction ?? ''} onChange={(e) => setEdit({ ...edit, food_interaction: e.target.value })} rows={2} /></div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div><Label className="mb-1.5">🚬 Smoking</Label><Input value={edit.smoking_interaction ?? ''} onChange={(e) => setEdit({ ...edit, smoking_interaction: e.target.value })} /></div>
-                  <div><Label className="mb-1.5">🍺 Alcohol</Label><Input value={edit.alcohol_interaction ?? ''} onChange={(e) => setEdit({ ...edit, alcohol_interaction: e.target.value })} /></div>
+              {/* Row 4: Safety chips */}
+              <div className="flex flex-wrap gap-1.5 items-center">
+                <span className="text-xs text-muted-foreground mr-1">Safety:</span>
+                <ToggleChip on={edit.is_HAD} onChange={(v) => setEdit({ ...edit, is_HAD: v })}>🔴 HAD</ToggleChip>
+                <ToggleChip on={edit.beers_avoid_elderly} onChange={(v) => setEdit({ ...edit, beers_avoid_elderly: v })}>👴 Beers</ToggleChip>
+                <ToggleChip on={edit.g6pd_unsafe} onChange={(v) => setEdit({ ...edit, g6pd_unsafe: v })}>🩸 G6PD</ToggleChip>
+                <ToggleChip on={edit.lactation_safe === false} onChange={(v) => setEdit({ ...edit, lactation_safe: v ? false : undefined })}>🤱 ห้ามนมบุตร</ToggleChip>
+                <ToggleChip on={edit.requires_ibw} onChange={(v) => setEdit({ ...edit, requires_ibw: v })}>💪 IBW</ToggleChip>
+                <ToggleChip on={edit.active !== false} onChange={(v) => setEdit({ ...edit, active: v })}>✅ Active</ToggleChip>
+              </div>
+
+              {/* Row 5: LASA + Allergens + Cross-reactivity */}
+              <div className="grid grid-cols-3 gap-2">
+                <div><Label className="mb-1 text-xs">LASA pairs (icode คั่นด้วย ,)</Label><Input className="h-9" value={edit.lasa_with?.join(', ') ?? ''} onChange={(e) => setEdit({ ...edit, lasa_with: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} placeholder="ตัวอย่าง: HYDROX, HYDROCH" /></div>
+                <div><Label className="mb-1 text-xs">Allergens (คั่นด้วย ,)</Label><Input list="dl-allergens" className="h-9" value={edit.allergens?.join(', ') ?? ''} onChange={(e) => setEdit({ ...edit, allergens: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} placeholder="ตัวอย่าง: Penicillin, Beta-lactam" /></div>
+                <div><Label className="mb-1 text-xs">Cross-reactivity (คั่นด้วย ,)</Label><Input list="dl-allergens" className="h-9" value={edit.cross_react?.join(', ') ?? ''} onChange={(e) => setEdit({ ...edit, cross_react: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} placeholder="ตัวอย่าง: Cephalosporin, Carbapenem" /></div>
+              </div>
+
+              {/* Row 6: Interactions — placeholder บอกรูปแบบที่ควรกรอก */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="mb-1 text-xs">🍽 Food interaction (เตือนทุกครั้งที่จ่าย)</Label>
+                  <Input className="h-9" value={edit.food_interaction ?? ''} onChange={(e) => setEdit({ ...edit, food_interaction: e.target.value })} placeholder="ตัวอย่าง: เลี่ยง grapefruit · กินผักใบเขียวสม่ำเสมอ" />
                 </div>
-                <div><Label className="mb-1.5">🧪 Lab Test Interference</Label><Input value={edit.lab_interference ?? ''} onChange={(e) => setEdit({ ...edit, lab_interference: e.target.value })} placeholder="เช่น false ↑ glucose, false ↓ Free T4" /></div>
-                <div><Label className="mb-1.5">Note</Label><Input value={edit.note ?? ''} onChange={(e) => setEdit({ ...edit, note: e.target.value })} /></div>
-              </section>
+                <div>
+                  <Label className="mb-1 text-xs">🧪 Lab interference</Label>
+                  <Input className="h-9" value={edit.lab_interference ?? ''} onChange={(e) => setEdit({ ...edit, lab_interference: e.target.value })} placeholder="ตัวอย่าง: Phenytoin → false ↓ Free T4" />
+                </div>
+                <div>
+                  <Label className="mb-1 text-xs">🚬 Smoking interaction (ระบบบังคับถามผู้ป่วยอัตโนมัติ)</Label>
+                  <Input className="h-9" value={edit.smoking_interaction ?? ''} onChange={(e) => setEdit({ ...edit, smoking_interaction: e.target.value })} placeholder="ตัวอย่าง: ผู้สูบบุหรี่ต้องเพิ่ม dose 50% (CYP1A2 induction)" />
+                </div>
+                <div>
+                  <Label className="mb-1 text-xs">🍺 Alcohol interaction (ระบบบังคับถามผู้ป่วยอัตโนมัติ)</Label>
+                  <Input className="h-9" value={edit.alcohol_interaction ?? ''} onChange={(e) => setEdit({ ...edit, alcohol_interaction: e.target.value })} placeholder="ตัวอย่าง: เสี่ยง hypoglycemia · disulfiram-like reaction" />
+                </div>
+              </div>
+
+              {/* Row 7: Note */}
+              <div>
+                <Label className="mb-1 text-xs">Note (โน้ตภายใน)</Label>
+                <Input className="h-9" value={edit.note ?? ''} onChange={(e) => setEdit({ ...edit, note: e.target.value })} placeholder="ตัวอย่าง: หมดสต๊อก รพ. ตั้งแต่ 1 ม.ค. 68" />
+              </div>
             </div>
           )}
           <DialogFooter>
@@ -169,7 +394,7 @@ function ToggleChip({ on, onChange, children }: { on?: boolean; onChange: (v: bo
     <button
       type="button"
       onClick={() => onChange(!on)}
-      className={`px-3 py-1.5 rounded-full border text-sm transition ${on ? 'bg-red-50 border-red-300 text-red-900 font-medium' : 'hover:bg-accent'}`}
+      className={`px-2.5 py-1 rounded-full border text-xs transition ${on ? 'bg-red-50 border-red-300 text-red-900 font-medium' : 'hover:bg-accent'}`}
     >
       {on && '✓ '}{children}
     </button>
