@@ -57,17 +57,30 @@ export function buildRuleSummary(patient: PatientInput, drugs: DrugEntry[], aler
     g6pdAlerts.forEach((a) => actions.push(`เปลี่ยนยา: ${a.title.replace('🩸 G6PD + ', '').replace(' — ห้ามใช้', '')}`))
   }
 
-  // ===== DDI =====
+  // ===== DDI — แสดงชื่อยาคู่ที่เกิดปฏิกิริยา =====
   const ddiRed = alerts.filter((a) => a.type === 'DDI' && a.severity === 'red')
   const ddiOrange = alerts.filter((a) => a.type === 'DDI' && a.severity === 'orange')
+  function ddiPairLabel(a: ScreeningAlert): string {
+    // title format: "DDI {severity}: {drug A} ↔ {drug B}"
+    const m = a.title.match(/:\s*(.+?)\s*↔\s*(.+)$/)
+    if (m) return `${m[1].trim()} ↔ ${m[2].trim()}`
+    return a.drugs?.join(' + ') ?? ''
+  }
   if (ddiRed.length > 0) {
-    keyPoints.push(`⚠️ DDI รุนแรง ${ddiRed.length} คู่ — ห้าม/หลีกเลี่ยงการใช้ร่วม`)
+    if (ddiRed.length === 1) {
+      keyPoints.push(`⚠️ DDI รุนแรง: ${ddiPairLabel(ddiRed[0])} — ห้าม/หลีกเลี่ยงการใช้ร่วม`)
+    } else {
+      keyPoints.push(`⚠️ DDI รุนแรง ${ddiRed.length} คู่ — ห้าม/หลีกเลี่ยงการใช้ร่วม:`)
+      ddiRed.forEach((a) => keyPoints.push(`   • ${ddiPairLabel(a)}`))
+    }
     ddiRed.forEach((a) => {
-      if (a.recommendation) actions.push(`DDI: ${a.recommendation}`)
+      const pair = ddiPairLabel(a)
+      if (a.recommendation) actions.push(`DDI [${pair}]: ${a.recommendation}`)
     })
   }
   if (ddiOrange.length > 0) {
-    notes.push(`มี DDI ปานกลาง ${ddiOrange.length} คู่ — monitor ใกล้ชิด`)
+    const pairList = ddiOrange.map(ddiPairLabel).join(' · ')
+    notes.push(`มี DDI ปานกลาง ${ddiOrange.length} คู่ — monitor ใกล้ชิด: ${pairList}`)
   }
 
   // ===== Renal =====
@@ -82,13 +95,23 @@ export function buildRuleSummary(patient: PatientInput, drugs: DrugEntry[], aler
     })
   }
 
+  // helper: ดึงชื่อยาจาก alert
+  function drugNamesOf(a: ScreeningAlert): string {
+    if (a.drugs && a.drugs.length > 0) {
+      const names = a.drugs.map((ic) => drugs.find((d) => d.icode === ic)?.master?.drug_name ?? ic)
+      return names.join(', ')
+    }
+    return ''
+  }
+
   // ===== Pregnancy =====
   if (patient.is_pregnant) {
     const pregAlerts = alerts.filter((a) => a.type === 'PREG')
     if (pregAlerts.length > 0) {
-      keyPoints.push(`🤰 ผู้ป่วยตั้งครรภ์ + ยาเสี่ยง ${pregAlerts.length} ตัว`)
+      const names = pregAlerts.map(drugNamesOf).filter(Boolean).join(', ')
+      keyPoints.push(`🤰 ผู้ป่วยตั้งครรภ์ + ยาเสี่ยง: ${names || pregAlerts.length + ' ตัว'}`)
       pregAlerts.forEach((a) => {
-        if (a.recommendation) actions.push(`Pregnancy: ${a.recommendation}`)
+        if (a.recommendation) actions.push(`Pregnancy [${drugNamesOf(a)}]: ${a.recommendation}`)
       })
     }
   }
@@ -97,21 +120,24 @@ export function buildRuleSummary(patient: PatientInput, drugs: DrugEntry[], aler
   if (patient.is_lactating) {
     const lactAlerts = alerts.filter((a) => a.type === 'LACT')
     if (lactAlerts.length > 0) {
-      keyPoints.push(`🤱 ผู้ป่วยให้นมบุตร + ยาไม่แนะนำ ${lactAlerts.length} ตัว`)
+      const names = lactAlerts.map(drugNamesOf).filter(Boolean).join(', ')
+      keyPoints.push(`🤱 ผู้ป่วยให้นมบุตร + ยาไม่แนะนำ: ${names || lactAlerts.length + ' ตัว'}`)
     }
   }
 
   // ===== Beers =====
   const beersAlerts = alerts.filter((a) => a.type === 'BEERS')
   if (beersAlerts.length > 0 && patient.age) {
-    keyPoints.push(`👴 ผู้สูงอายุ (${patient.age} ปี) + ยา Beers list ${beersAlerts.length} ตัว — พิจารณาเปลี่ยน`)
+    const names = beersAlerts.map(drugNamesOf).filter(Boolean).join(', ')
+    keyPoints.push(`👴 ผู้สูงอายุ (${patient.age} ปี) + Beers list: ${names || beersAlerts.length + ' ตัว'} — พิจารณาเปลี่ยน`)
   }
 
   // ===== Duplicate therapy =====
   const drpAlerts = alerts.filter((a) => a.type === 'DRP')
   if (drpAlerts.length > 0) {
-    keyPoints.push(`🔁 พบยาซ้ำกลุ่ม/generic ${drpAlerts.length} รายการ`)
     drpAlerts.forEach((a) => {
+      // title format ของ dup class: "🚫 Duplicate: {class}" หรือ "ยาซ้ำ generic: ..."
+      keyPoints.push(`🔁 ${a.title.replace(/^🚫\s*|^/, '')}`)
       if (a.recommendation) actions.push(a.recommendation)
     })
   }
