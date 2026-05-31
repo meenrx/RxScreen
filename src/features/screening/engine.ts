@@ -1,4 +1,4 @@
-import type { DdiOverride, DiseaseRule, DrugMaster, HadRule, LabRule } from '@/types/drug'
+import type { DdiOverride, DiseaseRule, DrugMaster, HadRule, LabRule, DrugSubstitution } from '@/types/drug'
 import type { DrugEntry, PatientInput, ScreeningAlert } from '@/types/screening'
 import { calcCrCl, findMatchingDoseAction, renalBasisOf, computePediatricDose } from '@/features/renal/calc'
 
@@ -632,6 +632,28 @@ export function buildCostAlerts(drugs: DrugEntry[], threshold?: number): Screeni
   return alerts
 }
 
+// ============ Substitution — ยาเปลี่ยนบริษัท/รูปลักษณ์ ============
+export function buildSubstitutionAlerts(drugs: DrugEntry[], subs: DrugSubstitution[] | undefined): ScreeningAlert[] {
+  if (!subs || subs.length === 0) return []
+  const byIcode = new Map(subs.filter((s) => s.active).map((s) => [s.icode, s]))
+  const alerts: ScreeningAlert[] = []
+  for (const d of drugs) {
+    const s = byIcode.get(d.icode)
+    if (!s) continue
+    const change = [s.old_brand, s.new_brand].filter(Boolean).join(' → ')
+    alerts.push({
+      id: `subst_${d.icode}`,
+      type: 'SUBST',
+      severity: 'yellow',
+      title: `🔄 ยาเปลี่ยนบริษัท/รูปลักษณ์: ${d.master?.drug_name ?? d.icode}`,
+      detail: [change, s.note].filter(Boolean).join(' · ') || 'มีการเปลี่ยนบริษัท — ดูรูปก่อน/หลังด้านล่าง',
+      recommendation: 'แจ้งผู้ป่วยว่ายาเปลี่ยนหน้าตา แต่เป็นยาเดิม เพื่อลดความสับสน',
+      drugs: [d.icode],
+    })
+  }
+  return alerts
+}
+
 export interface ScreenContext {
   drugs: DrugEntry[]
   patient: PatientInput
@@ -644,6 +666,8 @@ export interface ScreenContext {
   expensiveThreshold?: number
   /** กลุ่มยาที่ห้ามจ่ายซ้ำ (ตั้งใน Settings) — ว่าง = เตือนทุกกลุ่ม */
   noDuplicateClasses?: string[]
+  /** รายการยาที่เปลี่ยนบริษัท (active) — แสดงเตือนตอนคัดกรอง */
+  substitutions?: DrugSubstitution[]
 }
 
 export function runScreening(ctx: ScreenContext): ScreeningAlert[] {
@@ -651,6 +675,7 @@ export function runScreening(ctx: ScreenContext): ScreeningAlert[] {
     ...buildAllergyAlerts(ctx.drugs, ctx.patient.allergies),
     ...buildHadAlerts(ctx.drugs, ctx.hadRules ?? []),
     ...buildCostAlerts(ctx.drugs, ctx.expensiveThreshold),
+    ...buildSubstitutionAlerts(ctx.drugs, ctx.substitutions),
     ...buildG6pdAlerts(ctx.drugs, ctx.patient),
     ...buildDdiAlerts(ctx.drugs, ctx.ddiList),
     ...buildPregnancyAlerts(ctx.drugs, ctx.patient),

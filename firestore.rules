@@ -108,6 +108,12 @@ service cloud.firestore {
       allow write: if isActive();
     }
 
+    // === DRUG_SUBSTITUTION — ยาเปลี่ยนบริษัท + รูปก่อน/หลัง ===
+    match /DRUG_SUBSTITUTION/{docId} {
+      allow read: if isActive();
+      allow write: if hasAnyRole(['admin', 'pharmacist']);
+    }
+
     // === INTERVENTION — บันทึก off/เปลี่ยนยา + มูลค่าประหยัดสะสม ===
     match /INTERVENTION/{docId} {
       allow read: if isActive();

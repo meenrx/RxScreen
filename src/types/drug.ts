@@ -277,6 +277,31 @@ export interface Intervention {
   updatedAt?: Date
 }
 
+/** DRUG_SUBSTITUTION — ยาที่เปลี่ยนบริษัท/รูปลักษณ์ แสดงเตือนตอนคัดกรอง (พร้อมรูปก่อน/หลัง) */
+export interface DrugSubstitution {
+  id?: string
+  /** icode ของยาในระบบ */
+  icode: string
+  drug_name: string
+  /** ชื่อ/บริษัทเดิม */
+  old_brand?: string
+  /** ชื่อ/บริษัทใหม่ */
+  new_brand?: string
+  note?: string
+  /** URL รูปก่อน (Firebase Storage) */
+  before_image?: string
+  /** URL รูปหลัง (Firebase Storage) */
+  after_image?: string
+  /** แสดงเตือนตอนคัดกรองหรือไม่ */
+  active: boolean
+  /** วันที่เริ่มเปลี่ยน */
+  effective_date?: string
+  pharmacist_uid?: string
+  pharmacist_name?: string
+  createdAt?: Date
+  updatedAt?: Date
+}
+
 export interface DispensingLog {
   id?: string
   hn?: string

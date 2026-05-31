@@ -21,6 +21,8 @@ import { useScreeningStore } from '@/features/screening/screeningStore'
 import { runScreening } from '@/features/screening/engine'
 import { InterventionSection } from '@/features/intervention/InterventionSection'
 import { InterventionReorderWatcher } from '@/features/intervention/InterventionReorderWatcher'
+import { SubstitutionScreenPanel } from '@/features/substitution/SubstitutionScreenPanel'
+import { useActiveSubstitutions } from '@/features/substitution/hooks'
 import { logDispensing } from '@/features/history/api'
 import { useAuthStore } from '@/features/auth/authStore'
 import { getConfig, getDrugByIcode, listLabRulesByIcode } from '@/features/catalog/api'
@@ -46,11 +48,12 @@ export default function ScreeningPage() {
   const { data: screeningConfig } = useQuery({ queryKey: ['config-screening'], queryFn: () => getConfig('screening') })
   const expensiveThreshold = screeningConfig?.expensive_unit_price_threshold
   const noDuplicateClasses = screeningConfig?.duplicate_classes
+  const { data: substitutions = [] } = useActiveSubstitutions()
 
   const alerts = useMemo(() => {
     if (drugs.length === 0) return []
-    return runScreening({ drugs, patient, ddiList, labRules, diseaseRules, drugMasters, expensiveThreshold, noDuplicateClasses })
-  }, [drugs, patient, ddiList, labRules, diseaseRules, drugMasters, expensiveThreshold, noDuplicateClasses])
+    return runScreening({ drugs, patient, ddiList, labRules, diseaseRules, drugMasters, expensiveThreshold, noDuplicateClasses, substitutions })
+  }, [drugs, patient, ddiList, labRules, diseaseRules, drugMasters, expensiveThreshold, noDuplicateClasses, substitutions])
 
   const counts = useMemo(() => ({
     red: alerts.filter((a) => a.severity === 'red').length,
@@ -208,6 +211,9 @@ export default function ScreeningPage() {
               </div>
 
               <RuleSummaryPanel patient={patient} drugs={drugs} alerts={alerts} />
+
+              {/* รูปก่อน/หลัง ของยาที่เปลี่ยนบริษัท */}
+              <SubstitutionScreenPanel drugs={drugs} />
 
               <CollapsibleSection
                 title="รายละเอียดผลคัดกรองทุกหมวด"
