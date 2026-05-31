@@ -1,4 +1,4 @@
-import { writeBatch, doc, collection, serverTimestamp, getDocs } from 'firebase/firestore'
+import { writeBatch, doc, collection, serverTimestamp, getDocs, deleteField } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { fetchSheetCsv, toBool, toNumber } from './csv'
 import { expandSukhothaiDdi } from './seedDdi'
@@ -595,14 +595,27 @@ export async function unifyLabParamToCrCl(
   result.scanned = snap.size
 
   const SCR_PARAMS = ['scr', 'creatinine', 'serum creatinine', 'cr', 'serum cr', 's.cr', 's. cr']
-  const toUpdate: { id: string; data: Record<string, unknown> }[] = []
+  type UpdateOp = { id: string; update: Record<string, unknown> }
+  const toUpdate: UpdateOp[] = []
+
   for (const docSnap of snap.docs) {
     const data = docSnap.data() as Record<string, unknown>
     const param = ((data.param as string | undefined) ?? '').trim().toLowerCase()
-    if (SCR_PARAMS.includes(param)) {
+    const hasRange = !!(data.normal_range as string | undefined)
+    const isCrCl = param === 'crcl' || param === 'cr cl' || param === 'creatinine clearance'
+    const isScr = SCR_PARAMS.includes(param)
+
+    if (isScr) {
+      // SCr → CrCl + เคลียร์ normal_range (SCr range ไม่ใช่ CrCl range)
       toUpdate.push({
         id: docSnap.id,
-        data: { param: 'CrCl', unit: 'mL/min' },
+        update: { param: 'CrCl', unit: 'mL/min', normal_range: deleteField() },
+      })
+    } else if (isCrCl && hasRange) {
+      // เคลียร์ normal_range ของ rule ที่ param=CrCl แล้วแต่ยังมี range ผิด (เช่น 0.6-1.2 mL/min)
+      toUpdate.push({
+        id: docSnap.id,
+        update: { unit: 'mL/min', normal_range: deleteField() },
       })
     } else {
       result.skipped++
@@ -614,12 +627,12 @@ export async function unifyLabParamToCrCl(
     return result
   }
 
-  onProgress?.(`กำลังอัปเดต ${toUpdate.length} rule (SCr → CrCl)...`)
+  onProgress?.(`กำลังอัปเดต ${toUpdate.length} rule (SCr→CrCl + เคลียร์ range)...`)
   for (let i = 0; i < toUpdate.length; i += BATCH_LIMIT) {
     const batch = writeBatch(db)
     const slice = toUpdate.slice(i, i + BATCH_LIMIT)
-    for (const { id, data } of slice) {
-      batch.set(doc(collection(db, 'LAB_RULES'), id), data, { merge: true })
+    for (const { id, update } of slice) {
+      batch.update(doc(collection(db, 'LAB_RULES'), id), update)
     }
     try {
       await batch.commit()
@@ -630,6 +643,6 @@ export async function unifyLabParamToCrCl(
     }
   }
 
-  onProgress?.(`เสร็จสิ้น — อัปเดต ${result.updated} rule, ข้าม ${result.skipped} (ไม่ใช่ SCr)`)
+  onProgress?.(`เสร็จสิ้น — อัปเดต ${result.updated} rule (เคลียร์ range เรียบร้อย), ข้าม ${result.skipped}`)
   return result
 }
