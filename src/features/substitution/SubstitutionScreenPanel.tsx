@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { Repeat } from 'lucide-react'
 import { useActiveSubstitutions } from './hooks'
+import { toDisplayImageUrl } from './api'
 import type { DrugEntry } from '@/types/screening'
 
 /** แสดงรูปก่อน/หลัง ของยาที่เปลี่ยนบริษัท สำหรับยาในใบสั่งรอบนี้ */
@@ -46,12 +47,13 @@ export function SubstitutionScreenPanel({ drugs }: { drugs: DrugEntry[] }) {
 }
 
 function ImgBox({ label, url }: { label: string; url?: string }) {
+  const display = toDisplayImageUrl(url)
   return (
     <div className="space-y-1">
       <div className="text-[10px] text-muted-foreground uppercase tracking-wide">{label}</div>
-      {url ? (
-        <a href={url} target="_blank" rel="noreferrer">
-          <img src={url} alt={label} className="w-full h-32 object-contain rounded-lg border bg-white" />
+      {display ? (
+        <a href={display} target="_blank" rel="noreferrer">
+          <img src={display} alt={label} className="w-full h-32 object-contain rounded-lg border bg-white" />
         </a>
       ) : (
         <div className="w-full h-32 rounded-lg border border-dashed grid place-items-center text-xs text-muted-foreground">ไม่มีรูป</div>

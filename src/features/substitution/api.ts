@@ -1,9 +1,22 @@
 import {
   collection, doc, getDocs, setDoc, deleteDoc, query, where, orderBy, serverTimestamp,
 } from 'firebase/firestore'
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
-import { db, storage } from '@/lib/firebase'
+import { db } from '@/lib/firebase'
 import type { DrugSubstitution } from '@/types/drug'
+
+/**
+ * แปลงลิงก์รูปให้แสดงใน <img> ได้ — รองรับ Google Drive share link
+ * (ต้องตั้งแชร์ไฟล์เป็น "ทุกคนที่มีลิงก์ดูได้")
+ */
+export function toDisplayImageUrl(url: string | undefined): string | undefined {
+  if (!url) return undefined
+  const u = url.trim()
+  if (u.includes('drive.google.com')) {
+    const m = u.match(/(?:\/file\/d\/|[?&]id=|\/d\/)([A-Za-z0-9_-]{20,})/)
+    if (m) return `https://drive.google.com/thumbnail?id=${m[1]}&sz=w1000`
+  }
+  return u
+}
 
 const COLL = 'DRUG_SUBSTITUTION'
 
@@ -27,15 +40,6 @@ export async function listActiveSubstitutions(): Promise<DrugSubstitution[]> {
   return snap.docs.map((d) => mapDoc(d.id, d.data()))
 }
 
-/** อัปโหลดรูป → คืน download URL */
-export async function uploadSubstitutionImage(icode: string, kind: 'before' | 'after', file: File): Promise<string> {
-  const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-  const path = `substitution/${icode}/${kind}_${safe}`
-  const r = ref(storage, path)
-  await uploadBytes(r, file)
-  return getDownloadURL(r)
-}
-
 function clean(o: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(o)) {
@@ -57,10 +61,5 @@ export async function saveSubstitution(s: DrugSubstitution): Promise<string> {
 }
 
 export async function deleteSubstitution(s: DrugSubstitution): Promise<void> {
-  // ลบรูปใน Storage ด้วย (ถ้ามี) — ไม่ให้ error ถ้าลบไม่ได้
-  for (const url of [s.before_image, s.after_image]) {
-    if (!url) continue
-    try { await deleteObject(ref(storage, url)) } catch { /* ignore */ }
-  }
   await deleteDoc(doc(db, COLL, s.id ?? s.icode))
 }

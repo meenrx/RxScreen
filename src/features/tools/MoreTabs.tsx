@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ClipboardList, Save, Trash2, Upload, Loader2, Power } from 'lucide-react'
+import { ClipboardList, Save, Trash2, Power } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -10,7 +10,7 @@ import { DrugCombobox } from '@/components/DrugCombobox'
 import { useDrugs } from '@/features/catalog/hooks'
 import { useAuthStore } from '@/features/auth/authStore'
 import { useSubstitutions, useSaveSubstitution, useDeleteSubstitution } from '@/features/substitution/hooks'
-import { uploadSubstitutionImage } from '@/features/substitution/api'
+import { toDisplayImageUrl } from '@/features/substitution/api'
 import type { DrugSubstitution } from '@/types/drug'
 import { toast } from 'sonner'
 
@@ -29,24 +29,9 @@ export function SubstitutionTab() {
   const [note, setNote] = useState('')
   const [beforeImg, setBeforeImg] = useState('')
   const [afterImg, setAfterImg] = useState('')
-  const [uploading, setUploading] = useState<'before' | 'after' | null>(null)
 
   function resetForm() {
     setIcode(''); setDrugName(''); setOldBrand(''); setNewBrand(''); setNote(''); setBeforeImg(''); setAfterImg('')
-  }
-
-  async function handleUpload(kind: 'before' | 'after', file: File | undefined) {
-    if (!file || !icode) { if (!icode) toast.error('เลือกยาก่อนอัปโหลดรูป'); return }
-    setUploading(kind)
-    try {
-      const url = await uploadSubstitutionImage(icode, kind, file)
-      if (kind === 'before') setBeforeImg(url); else setAfterImg(url)
-      toast.success('อัปโหลดรูปเรียบร้อย')
-    } catch (e) {
-      toast.error('อัปโหลดไม่สำเร็จ — ตรวจว่าเปิด Firebase Storage แล้ว: ' + (e as Error).message)
-    } finally {
-      setUploading(null)
-    }
   }
 
   async function save() {
@@ -86,9 +71,14 @@ export function SubstitutionTab() {
 
           <div><Label className="mb-1.5">หมายเหตุ</Label><Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="เช่น เม็ดสีเปลี่ยนจากขาวเป็นชมพู ขนาดเท่าเดิม" /></div>
 
-          <div className="grid grid-cols-2 gap-2">
-            <ImageUpload label="รูปก่อน (เดิม)" url={beforeImg} busy={uploading === 'before'} onPick={(f) => handleUpload('before', f)} />
-            <ImageUpload label="รูปหลัง (ใหม่)" url={afterImg} busy={uploading === 'after'} onPick={(f) => handleUpload('after', f)} />
+          <div className="rounded-xl border bg-muted/20 p-3 space-y-2">
+            <p className="text-xs text-muted-foreground">
+              วางลิงก์รูป (Google Drive / ที่อื่น) — รูป Drive ต้องตั้งแชร์ <b>"ทุกคนที่มีลิงก์ดูได้"</b> ก่อน
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <UrlImage label="รูปก่อน (เดิม)" url={beforeImg} onChange={setBeforeImg} />
+              <UrlImage label="รูปหลัง (ใหม่)" url={afterImg} onChange={setAfterImg} />
+            </div>
           </div>
 
           <div className="flex justify-end gap-2">
@@ -109,8 +99,8 @@ export function SubstitutionTab() {
                 <div className="font-medium text-sm truncate">{s.drug_name}</div>
                 <div className="text-[11px] text-muted-foreground truncate">{[s.old_brand, s.new_brand].filter(Boolean).join(' → ') || s.note}</div>
               </div>
-              {s.before_image && <img src={s.before_image} alt="" className="size-9 rounded object-cover border" />}
-              {s.after_image && <img src={s.after_image} alt="" className="size-9 rounded object-cover border" />}
+              {s.before_image && <img src={toDisplayImageUrl(s.before_image)} alt="" className="size-9 rounded object-cover border" />}
+              {s.after_image && <img src={toDisplayImageUrl(s.after_image)} alt="" className="size-9 rounded object-cover border" />}
               <Button variant="ghost" size="icon" onClick={() => toggleActive(s)} title="เปิด/ปิดการแสดง"><Power className="size-4" /></Button>
               <Button variant="ghost" size="icon" onClick={() => delMut.mutate(s)}><Trash2 className="size-4 text-red-500" /></Button>
             </div>
@@ -121,24 +111,15 @@ export function SubstitutionTab() {
   )
 }
 
-function ImageUpload({ label, url, busy, onPick }: { label: string; url?: string; busy: boolean; onPick: (f: File | undefined) => void }) {
+function UrlImage({ label, url, onChange }: { label: string; url: string; onChange: (v: string) => void }) {
+  const display = toDisplayImageUrl(url)
   return (
     <div className="space-y-1">
       <Label className="text-xs">{label}</Label>
-      {url ? (
-        <img src={url} alt={label} className="w-full h-28 object-contain rounded-lg border bg-white" />
-      ) : (
-        <label className="w-full h-28 rounded-lg border border-dashed grid place-items-center cursor-pointer hover:bg-accent text-xs text-muted-foreground">
-          {busy ? <Loader2 className="size-5 animate-spin" /> : <span className="flex flex-col items-center gap-1"><Upload className="size-5" /> อัปโหลด</span>}
-          <input type="file" accept="image/*" className="hidden" onChange={(e) => onPick(e.target.files?.[0])} />
-        </label>
-      )}
-      {url && (
-        <label className="text-[11px] text-primary cursor-pointer hover:underline">
-          เปลี่ยนรูป
-          <input type="file" accept="image/*" className="hidden" onChange={(e) => onPick(e.target.files?.[0])} />
-        </label>
-      )}
+      <Input value={url} onChange={(e) => onChange(e.target.value)} placeholder="วางลิงก์รูป…" className="h-9 text-xs" />
+      {display
+        ? <img src={display} alt={label} className="w-full h-28 object-contain rounded-lg border bg-white" />
+        : <div className="w-full h-28 rounded-lg border border-dashed grid place-items-center text-xs text-muted-foreground">ยังไม่มีรูป</div>}
     </div>
   )
 }
