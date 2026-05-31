@@ -7,6 +7,7 @@ import { CounselingAdmin } from '@/features/admin/CounselingAdmin'
 import { DiseaseAdmin } from '@/features/admin/DiseaseAdmin'
 import { UsersAdmin } from '@/features/admin/UsersAdmin'
 import { ImportSheet } from '@/features/admin/ImportSheet'
+import { HadRuleAdmin } from '@/features/admin/HadRuleAdmin'
 
 export default function AdminPage() {
   const [tab, setTab] = useState('import')
@@ -22,6 +23,7 @@ export default function AdminPage() {
           <TabsTrigger value="drugs">ยา (DRUG_MASTER)</TabsTrigger>
           <TabsTrigger value="lab">Lab/Dose</TabsTrigger>
           <TabsTrigger value="ddi">DDI</TabsTrigger>
+          <TabsTrigger value="had">🔴 HAD</TabsTrigger>
           <TabsTrigger value="counseling">Counseling</TabsTrigger>
           <TabsTrigger value="disease">Disease</TabsTrigger>
           <TabsTrigger value="users">ผู้ใช้</TabsTrigger>
@@ -30,6 +32,7 @@ export default function AdminPage() {
         <TabsContent value="drugs"><DrugMasterAdmin /></TabsContent>
         <TabsContent value="lab"><LabRuleAdmin /></TabsContent>
         <TabsContent value="ddi"><DdiAdmin /></TabsContent>
+        <TabsContent value="had"><HadRuleAdmin /></TabsContent>
         <TabsContent value="counseling"><CounselingAdmin /></TabsContent>
         <TabsContent value="disease"><DiseaseAdmin /></TabsContent>
         <TabsContent value="users"><UsersAdmin /></TabsContent>

@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import * as api from './api'
-import type { DrugMaster, LabRule, DdiOverride, DrugCounseling, DiseaseRule } from '@/types/drug'
+import type { DrugMaster, LabRule, DdiOverride, DrugCounseling, DiseaseRule, HadRule } from '@/types/drug'
 import { toast } from 'sonner'
 
 export function useDrugs() {
@@ -83,7 +83,23 @@ export function useSaveDiseaseRule() {
   })
 }
 
-export function useDelete(kind: 'drug' | 'lab' | 'ddi' | 'counseling' | 'disease') {
+export function useHadRules() {
+  return useQuery({ queryKey: ['had'], queryFn: api.listHadRules })
+}
+
+export function useSaveHadRule() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (h: HadRule) => api.saveHadRule(h),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['had'] })
+      toast.success('บันทึก HAD rule เรียบร้อย')
+    },
+    onError: (e) => toast.error('บันทึกไม่สำเร็จ: ' + (e as Error).message),
+  })
+}
+
+export function useDelete(kind: 'drug' | 'lab' | 'ddi' | 'counseling' | 'disease' | 'had') {
   const qc = useQueryClient()
   const fn = {
     drug: api.deleteDrug,
@@ -91,8 +107,9 @@ export function useDelete(kind: 'drug' | 'lab' | 'ddi' | 'counseling' | 'disease
     ddi: api.deleteDdiOverride,
     counseling: api.deleteCounseling,
     disease: api.deleteDiseaseRule,
+    had: api.deleteHadRule,
   }[kind]
-  const keyMap = { drug: 'drugs', lab: 'lab-rules', ddi: 'ddi', counseling: 'counseling', disease: 'disease' }
+  const keyMap = { drug: 'drugs', lab: 'lab-rules', ddi: 'ddi', counseling: 'counseling', disease: 'disease', had: 'had' }
   return useMutation({
     mutationFn: (id: string) => fn(id),
     onSuccess: () => {

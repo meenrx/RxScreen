@@ -72,8 +72,11 @@ export function DdiAdmin() {
               <TableHead className="w-[110px]">Severity</TableHead>
               <TableHead className="w-[80px] text-center">Onset</TableHead>
               <TableHead className="w-[70px] text-center">Doc</TableHead>
-              <TableHead>Local note</TableHead>
-              <TableHead className="text-right">จัดการ</TableHead>
+              <TableHead className="w-[200px]">Local note</TableHead>
+              <TableHead className="w-[260px]">
+                <span className="text-emerald-700 dark:text-emerald-400">Action / คำแนะนำ</span>
+              </TableHead>
+              <TableHead className="text-right w-[80px]">จัดการ</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -96,7 +99,12 @@ export function DdiAdmin() {
                     ? <Badge variant="outline" className="text-[10px] font-mono">{d.documentation}</Badge>
                     : <span className="text-xs text-muted-foreground">-</span>}
                 </TableCell>
-                <TableCell className="max-w-xs truncate text-xs">{d.local_note ?? '-'}</TableCell>
+                <TableCell className="text-xs max-w-[200px]"><div className="line-clamp-2" title={d.local_note}>{d.local_note ?? '-'}</div></TableCell>
+                <TableCell className="text-xs max-w-[260px]">
+                  {d.recommendation
+                    ? <div className="line-clamp-2 text-emerald-800 dark:text-emerald-300" title={d.recommendation}>{d.recommendation}</div>
+                    : <span className="text-muted-foreground italic">- ยังไม่กรอก —</span>}
+                </TableCell>
                 <TableCell className="text-right">
                   <Button variant="ghost" size="icon" onClick={() => openEdit(d)}><Pencil className="size-4" /></Button>
                   <Button variant="ghost" size="icon" onClick={() => { if (confirm('ลบ DDI นี้?')) del.mutate(d.id!) }}><Trash2 className="size-4 text-red-500" /></Button>

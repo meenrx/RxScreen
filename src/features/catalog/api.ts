@@ -12,7 +12,7 @@ import {
   limit as fbLimit,
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import type { DrugMaster, LabRule, DdiOverride, DrugCounseling, DiseaseRule, AppConfig } from '@/types/drug'
+import type { DrugMaster, LabRule, DdiOverride, DrugCounseling, DiseaseRule, AppConfig, HadRule } from '@/types/drug'
 
 // === DRUG_MASTER ===
 export async function listDrugs(): Promise<DrugMaster[]> {
@@ -111,6 +111,22 @@ export async function saveDiseaseRule(r: DiseaseRule): Promise<string> {
 
 export async function deleteDiseaseRule(id: string) {
   await deleteDoc(doc(db, 'DISEASE_RULES', id))
+}
+
+// === HAD_RULES (High Alert Drug) ===
+export async function listHadRules(): Promise<HadRule[]> {
+  const snap = await getDocs(query(collection(db, 'HAD_RULES'), orderBy('drug_name')))
+  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as HadRule) }))
+}
+
+export async function saveHadRule(h: HadRule): Promise<string> {
+  const id = h.id ?? h.drug_key.replace(/[^a-z0-9]/gi, '_').toLowerCase()
+  await setDoc(doc(db, 'HAD_RULES', id), { ...h, updatedAt: serverTimestamp() }, { merge: true })
+  return id
+}
+
+export async function deleteHadRule(id: string) {
+  await deleteDoc(doc(db, 'HAD_RULES', id))
 }
 
 // === CONFIG ===

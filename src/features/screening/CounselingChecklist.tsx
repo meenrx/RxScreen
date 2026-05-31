@@ -117,7 +117,7 @@ export function CounselingChecklist({ drugs, onChange }: Props) {
       <CardContent className="space-y-4">
         {drugs.map((d) => {
           const c = counselingMap[d.icode]
-          const items = c?.checklist?.length ? c.checklist : DEFAULT_CHECKLIST
+          const items: string[] = buildSmartChecklist(d.master, c)
           const ck = checked[d.icode] ?? []
           const allDone = ck.length === items.length
           return (
