@@ -21,6 +21,27 @@ function isNsaid(d: DrugEntry): boolean {
   return NSAID_KEYS.some((k) => hay.includes(k))
 }
 
+/** รูปแบบยาที่บ่งชี้ว่าเป็นรูปแบบเหลว/สำหรับเด็ก (syrup / suspension / drops / elixir / solution)
+ *  เช็คจาก form (ไทย) หรือ dosage_form (อังกฤษ) หรือชื่อยาเอง — ครอบคลุมเคสที่ admin
+ *  ยังกรอกข้อมูล master ไม่ครบ */
+const LIQUID_FORM_KEYS_TH = ['ยาน้ำ', 'น้ำเชื่อม', 'น้ำแขวน', 'หยด']
+const LIQUID_FORM_KEYS_EN = [
+  'syr', 'syrup', 'susp', 'suspension', 'drop', 'elix', 'elixir',
+  'soln', 'solution', 'oral liquid', 'liquid',
+]
+
+function isSyrupForm(d: DrugEntry): boolean {
+  const form = (d.master?.form ?? '').toLowerCase()
+  const dosage = (d.master?.dosage_form ?? '').toLowerCase()
+  const name = ((d.master?.drug_name ?? d.drug_name) ?? '').toLowerCase()
+  if (LIQUID_FORM_KEYS_TH.some((k) => form.includes(k) || name.includes(k))) return true
+  if (LIQUID_FORM_KEYS_EN.some((k) => dosage.includes(k) || form.includes(k))) return true
+  // Fallback: name pattern like "PARACET SYR" or "(ยาน้ำ) ..." which is how the hospital
+  // formulary labels liquid forms even before form/dosage_form are populated.
+  if (/\bsyr\b|\bsusp\b|\bdrop\b|\bsoln\b/i.test(name)) return true
+  return false
+}
+
 export interface RequiredField {
   id: FieldId
   label: string
@@ -54,11 +75,19 @@ export function computeRequiredFields(drugs: DrugEntry[]): RequiredField[] {
 
   for (const d of drugs) {
     const name = d.master?.drug_name ?? d.icode
+    // Liquid/syrup forms in this hospital are de facto pediatric prescribing —
+    // skip adult-specific requirements (Cockcroft-Gault CrCl, IBW, Beers,
+    // smoking/alcohol, and Cat-C "use with caution" pregnancy) so the
+    // pharmacist sees only what's actually useful: weight + specific labs.
+    // Cat D/X pregnancy and G6PD are kept because they apply regardless of
+    // dosage form.
+    const syrup = isSyrupForm(d)
+
     // 1) มี dose_meta → ปรับ dose ตามไต
     //    - rule ที่ใช้ CrCl → ขอ age+weight+sex+scr (คำนวณ Cockcroft-Gault)
     //    - rule ที่ใช้ eGFR → ขอ eGFR ตรง ๆ ไม่ต้องคำนวณ
     const renalRule = d.labRules?.find((r) => r.dose_meta)
-    if (renalRule) {
+    if (renalRule && !syrup) {
       if (renalBasisOf(renalRule) === 'egfr') {
         add('egfr', 'eGFR', 'mL/min', `${name} → ปรับ dose ตาม eGFR (กรอกค่าตรง)`, 'high')
       } else {
@@ -69,30 +98,32 @@ export function computeRequiredFields(drugs: DrugEntry[]): RequiredField[] {
       }
     }
     // 1.2) NSAID → ขอค่าไต (eGFR) เพื่อเช็คความปลอดภัย (เสี่ยง AKI)
+    //   เก็บไว้แม้เป็นยาน้ำ — เด็กกินยาน้ำ NSAID ก็เสี่ยง AKI เหมือนกัน
     if (isNsaid(d)) {
       add('egfr', 'eGFR', 'mL/min', `${name} (NSAID) → ควรเช็คการทำงานของไต`, 'high')
     }
     // 1.5) ยาที่ต้องใช้ IBW → ขอส่วนสูงเพิ่ม
     //   (Aminoglycosides, Vancomycin, Phenytoin loading dose ฯลฯ)
-    if (d.master?.requires_ibw) {
+    if (d.master?.requires_ibw && !syrup) {
       add('age', 'อายุ', 'ปี', `${name} → ต้องการ IBW`, 'high')
       add('weight', 'น้ำหนัก', 'kg', `${name} → ต้องการ IBW`, 'high')
       add('sex', 'เพศ', undefined, `${name} → ต้องการ IBW`, 'high')
       add('height', 'ส่วนสูง', 'cm', `${name} → คำนวณ IBW (Devine)`, 'high')
     }
     // 2) Pregnancy category D/X → ถามตั้งครรภ์ตรง ๆ (ไม่ต้องผ่านเพศ)
+    //   เก็บไว้แม้เป็นยาน้ำ — แม่ที่ตั้งครรภ์สามารถได้รับยาน้ำได้
     if (d.master?.pregnancy_category === 'D' || d.master?.pregnancy_category === 'X') {
       add('is_pregnant', 'ตั้งครรภ์', undefined, `${name} (Cat ${d.master.pregnancy_category}) — ต้องเช็คก่อนจ่าย`, 'high')
     }
-    if (d.master?.pregnancy_category === 'C') {
+    if (d.master?.pregnancy_category === 'C' && !syrup) {
       add('is_pregnant', 'ตั้งครรภ์', undefined, `${name} (Cat C) — ใช้ระวัง`, 'medium')
     }
     // 3) Lactation unsafe → ถามให้นม
-    if (d.master?.lactation_safe === false) {
+    if (d.master?.lactation_safe === false && !syrup) {
       add('is_lactating', 'ให้นมบุตร', undefined, `${name} ไม่แนะนำในระยะให้นม`, 'high')
     }
-    // 4) Beers → ขออายุ
-    if (d.master?.beers_avoid_elderly) {
+    // 4) Beers → ขออายุ — ข้ามถ้าเป็นยาน้ำ (เด็กไม่ใช่ผู้สูงอายุ)
+    if (d.master?.beers_avoid_elderly && !syrup) {
       add('age', 'อายุ', 'ปี', `${name} อยู่ใน Beers (≥65 ปี)`, 'high')
     }
     // 5) Pediatric dose → ขอแค่ "น้ำหนัก" (คำนวณ mg/kg/dose) ไม่ต้องขอเพศ/อายุ
@@ -100,18 +131,24 @@ export function computeRequiredFields(drugs: DrugEntry[]): RequiredField[] {
     if (hasPed) {
       add('weight', 'น้ำหนัก', 'kg', `${name} → คำนวณขนาดยาเด็ก (mg/kg/dose)`, 'high')
     }
-    // 6) Smoking interaction
-    if (d.master?.smoking_interaction) {
+    // 5b) ยาน้ำที่ยังไม่มี pediatric_dose ใน LAB_RULES — ก็ยังต้องการน้ำหนัก
+    //     เพราะใช้สูตร mg/kg แบบมาตรฐานคำนวณ adhoc ในใบสั่งจริง
+    if (syrup && !hasPed) {
+      add('weight', 'น้ำหนัก', 'kg', `${name} (ยาน้ำ) → ใช้น้ำหนักคำนวณขนาดยา`, 'high')
+    }
+    // 6) Smoking interaction — adult-specific
+    if (d.master?.smoking_interaction && !syrup) {
       add('smoking', 'สูบบุหรี่', undefined, `${name} มีปฏิกิริยากับบุหรี่`, 'medium')
     }
-    if (d.master?.alcohol_interaction) {
+    if (d.master?.alcohol_interaction && !syrup) {
       add('alcohol', 'ดื่มแอลกอฮอล์', undefined, `${name} มีปฏิกิริยากับแอลกอฮอล์`, 'medium')
     }
     // 7) G6PD-unsafe → ถาม "มี G6PD?" (ใช่/ไม่ใช่)
+    //   เก็บไว้แม้เป็นยาน้ำ — เด็กเป็น G6PD ได้
     if (d.master?.g6pd_unsafe) {
       add('g6pd', 'มี G6PD', undefined, `${name} ห้ามในผู้ป่วย G6PD`, 'high')
     }
-    // 8) LAB_RULES param specific → ใส่ field ตาม param
+    // 8) LAB_RULES param specific → ใส่ field ตาม param (เก็บไว้ทั้ง 2 กรณี)
     for (const r of d.labRules ?? []) {
       if (!r.param) continue
       const id = paramToFieldId(r.param)

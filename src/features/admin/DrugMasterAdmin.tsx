@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Plus, Pencil, Trash2, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -53,6 +53,167 @@ const ALLERGEN_OPTIONS = [
   'NSAID', 'Aspirin', 'Macrolide', 'Quinolone', 'Tetracycline',
   'Opioid', 'Codeine', 'Morphine', 'Latex', 'Iodine', 'Egg', 'Soy',
 ]
+
+// Multi-select picker over DRUG_MASTER. Stores the selection as a list of
+// icodes (stable across renames). Renders selected drugs as chips and a
+// type-to-search input that adds the next pick on click.
+function LasaPicker({
+  drugs,
+  value,
+  onChange,
+  excludeIcode,
+  placeholder = 'ค้นชื่อยา/icode เพื่อเพิ่ม...',
+}: {
+  drugs: DrugMaster[]
+  value: string[] | undefined
+  onChange: (next: string[]) => void
+  /** ห้ามเลือกตัวเองเป็น LASA ของตัวเอง */
+  excludeIcode?: string
+  placeholder?: string
+}) {
+  const [q, setQ] = useState('')
+  const [show, setShow] = useState(false)
+
+  const selected = useMemo(
+    () =>
+      (value ?? []).map(
+        (icode) =>
+          drugs.find((d) => d.icode === icode) ??
+          // legacy: free-text name (จากสมัยก่อน) — โชว์ตัวอักษรไป
+          ({ icode, drug_name: icode } as DrugMaster),
+      ),
+    [value, drugs],
+  )
+
+  const suggestions = useMemo(() => {
+    const term = q.trim().toLowerCase()
+    if (!term) return []
+    const taken = new Set(value ?? [])
+    return drugs
+      .filter((d) => d.icode !== excludeIcode && !taken.has(d.icode))
+      .filter(
+        (d) =>
+          d.drug_name.toLowerCase().includes(term) ||
+          d.generic_name?.toLowerCase().includes(term) ||
+          d.icode.toLowerCase().includes(term),
+      )
+      .slice(0, 10)
+  }, [q, drugs, value, excludeIcode])
+
+  function add(d: DrugMaster) {
+    onChange([...(value ?? []), d.icode])
+    setQ('')
+    setShow(false)
+  }
+  function remove(icode: string) {
+    onChange((value ?? []).filter((x) => x !== icode))
+  }
+
+  return (
+    <div className="space-y-1">
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {selected.map((d) => (
+            <span
+              key={d.icode}
+              className="inline-flex items-center gap-1 rounded-md bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700 px-2 py-0.5 text-xs"
+            >
+              <span className="font-medium">{d.drug_name}</span>
+              <span className="font-mono text-[10px] opacity-60">
+                [{d.icode}]
+              </span>
+              <button
+                type="button"
+                onClick={() => remove(d.icode)}
+                className="ml-0.5 -mr-0.5 hover:text-red-600"
+                aria-label="ลบ"
+              >
+                ✕
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="relative">
+        <Input
+          className="h-9"
+          value={q}
+          placeholder={placeholder}
+          onChange={(e) => {
+            setQ(e.target.value)
+            setShow(true)
+          }}
+          onFocus={() => setShow(true)}
+          onBlur={() => setTimeout(() => setShow(false), 150)}
+        />
+        {show && suggestions.length > 0 && (
+          <ul className="absolute z-30 left-0 right-0 mt-1 max-h-64 overflow-y-auto rounded-md border bg-popover shadow-lg">
+            {suggestions.map((d) => (
+              <li key={d.icode}>
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => add(d)}
+                  className="w-full text-left px-3 py-1.5 hover:bg-accent text-sm flex items-center gap-2"
+                >
+                  <span className="font-mono text-[10px] opacity-60 w-16 shrink-0">
+                    {d.icode}
+                  </span>
+                  <span className="flex-1 truncate">{d.drug_name}</span>
+                  {d.generic_name && (
+                    <span className="text-xs opacity-60 truncate max-w-[40%]">
+                      {d.generic_name}
+                    </span>
+                  )}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// Comma-separated list input that owns its own raw text so the user can
+// type a "," without it being immediately swallowed by split/trim/filter
+// on every keystroke. We normalize (trim + drop blanks) only on blur.
+function CsvListInput({
+  value,
+  onChange,
+  placeholder,
+  list,
+  className,
+}: {
+  value: string[] | undefined
+  onChange: (next: string[]) => void
+  placeholder?: string
+  list?: string
+  className?: string
+}) {
+  const [text, setText] = useState<string>(value?.join(', ') ?? '')
+  // Resync when the parent value changes from outside (e.g. selecting a
+  // different drug in the table) — and only when it actually differs from
+  // what the user has typed, so we don't fight their cursor on every keystroke.
+  useEffect(() => {
+    const next = value?.join(', ') ?? ''
+    const normalized = text.split(',').map((s) => s.trim()).filter(Boolean).join(', ')
+    if (next !== normalized) setText(next)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value])
+  return (
+    <Input
+      list={list}
+      className={className ?? 'h-9'}
+      value={text}
+      placeholder={placeholder}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() =>
+        onChange(text.split(',').map((s) => s.trim()).filter(Boolean))
+      }
+    />
+  )
+}
 
 // ===== Resizable column widths (persisted in localStorage) =====
 // "name" คอลัมน์ flex รับพื้นที่เหลือ → ชื่อยาเต็มสุดเสมอ
@@ -174,10 +335,6 @@ export function DrugMasterAdmin() {
           <Table style={{ tableLayout: 'fixed' }}>
             <TableHeader className="bg-muted/50 sticky top-0">
               <TableRow className="text-sm">
-                <TableHead style={{ width: widths.action }} className="relative text-center">
-                  จัดการ
-                  <ResizeHandle width={widths.action} onResize={(w) => setWidth('action', w)} />
-                </TableHead>
                 <TableHead style={{ width: widths.icode }} className="relative">
                   icode
                   <ResizeHandle width={widths.icode} onResize={(w) => setWidth('icode', w)} />
@@ -198,21 +355,15 @@ export function DrugMasterAdmin() {
                 <TableHead style={{ width: widths.tags }} className="relative">
                   Tags
                 </TableHead>
+                <TableHead style={{ width: widths.action }} className="relative text-center">
+                  จัดการ
+                  <ResizeHandle width={widths.action} onResize={(w) => setWidth('action', w)} />
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.map((d) => (
                 <TableRow key={d.id}>
-                  <TableCell style={{ width: widths.action }} className="py-2 overflow-hidden">
-                    <div className="flex gap-0">
-                      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => openEdit(d)}>
-                        <Pencil className="size-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => { if (confirm('ลบยานี้?')) del.mutate(d.id!) }}>
-                        <Trash2 className="size-4 text-red-500" />
-                      </Button>
-                    </div>
-                  </TableCell>
                   <TableCell style={{ width: widths.icode }} className="font-mono text-sm py-2 truncate">{d.icode}</TableCell>
                   <TableCell className="py-2 overflow-hidden">
                     <div className="font-semibold text-base leading-tight truncate" title={d.drug_name}>{d.drug_name}</div>
@@ -240,6 +391,16 @@ export function DrugMasterAdmin() {
                       {d.pregnancy_category && <Badge variant={d.pregnancy_category === 'X' ? 'red' : d.pregnancy_category === 'D' ? 'orange' : 'yellow'} className="text-[10px] px-1.5">P:{d.pregnancy_category}</Badge>}
                       {d.beers_avoid_elderly && <Badge variant="orange" className="text-[10px] px-1.5">Beers</Badge>}
                       {d.g6pd_unsafe && <Badge variant="red" className="text-[10px] px-1.5">G6PD</Badge>}
+                    </div>
+                  </TableCell>
+                  <TableCell style={{ width: widths.action }} className="py-2 overflow-hidden">
+                    <div className="flex gap-0">
+                      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => openEdit(d)}>
+                        <Pencil className="size-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => { if (confirm('ลบยานี้?')) del.mutate(d.id!) }}>
+                        <Trash2 className="size-4 text-red-500" />
+                      </Button>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -347,18 +508,45 @@ export function DrugMasterAdmin() {
 
               {/* Row 5: LASA + Allergens + Cross-reactivity */}
               <div className="grid grid-cols-3 gap-2">
-                <div><Label className="mb-1 text-xs">LASA pairs (icode คั่นด้วย ,)</Label><Input className="h-9" value={edit.lasa_with?.join(', ') ?? ''} onChange={(e) => setEdit({ ...edit, lasa_with: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} placeholder="ตัวอย่าง: HYDROX, HYDROCH" /></div>
-                <div><Label className="mb-1 text-xs">Allergens (คั่นด้วย ,)</Label><Input list="dl-allergens" className="h-9" value={edit.allergens?.join(', ') ?? ''} onChange={(e) => setEdit({ ...edit, allergens: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} placeholder="ตัวอย่าง: Penicillin, Beta-lactam" /></div>
-                <div><Label className="mb-1 text-xs">Cross-reactivity (คั่นด้วย ,)</Label><Input list="dl-allergens" className="h-9" value={edit.cross_react?.join(', ') ?? ''} onChange={(e) => setEdit({ ...edit, cross_react: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} placeholder="ตัวอย่าง: Cephalosporin, Carbapenem" /></div>
+                <div>
+                  <Label className="mb-1 text-xs">⚠️ LASA pairs (เลือกจากรายการยา)</Label>
+                  <LasaPicker
+                    drugs={data}
+                    value={edit.lasa_with}
+                    excludeIcode={edit.icode}
+                    onChange={(v) => setEdit({ ...edit, lasa_with: v })}
+                  />
+                </div>
+                <div>
+                  <Label className="mb-1 text-xs">
+                    🥚 สารกระตุ้นแพ้ในยานี้ (คั่นด้วย ,)
+                  </Label>
+                  <CsvListInput
+                    list="dl-allergens"
+                    value={edit.allergens}
+                    onChange={(v) => setEdit({ ...edit, allergens: v })}
+                    placeholder="เช่น egg, peanut, sulfa — ถ้าผู้ป่วยแพ้สิ่งเหล่านี้ ห้ามจ่ายยานี้"
+                  />
+                </div>
+                <div>
+                  <Label className="mb-1 text-xs">
+                    🔁 ระวังแพ้ข้าม (กลุ่ม/class คั่นด้วย ,)
+                  </Label>
+                  <CsvListInput
+                    list="dl-allergens"
+                    value={edit.cross_react}
+                    onChange={(v) => setEdit({ ...edit, cross_react: v })}
+                    placeholder="เช่น Penicillin, Sulfa — กลุ่มยาที่ผู้แพ้กลุ่มนี้อาจกระตุ้นได้"
+                  />
+                </div>
               </div>
 
               {/* Row 5.5: คำค้น / ชื่อเรียกอื่น (trade names) */}
               <div>
                 <Label className="mb-1 text-xs">🔎 คำค้น / ชื่อเรียกอื่น (คั่นด้วย ,)</Label>
-                <Input
-                  className="h-9"
-                  value={edit.search_keywords?.join(', ') ?? ''}
-                  onChange={(e) => setEdit({ ...edit, search_keywords: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
+                <CsvListInput
+                  value={edit.search_keywords}
+                  onChange={(v) => setEdit({ ...edit, search_keywords: v })}
                   placeholder="ตัวอย่าง: Atarax, ยาแก้คัน — พิมพ์คำเหล่านี้แล้วจะเจอยาตัวนี้ตอนคัดกรอง"
                 />
               </div>

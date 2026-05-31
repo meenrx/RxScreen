@@ -10,6 +10,7 @@ import { DrugInput } from '@/features/screening/DrugInput'
 import { GroupedAlertList } from '@/features/screening/GroupedAlertList'
 import { AISummaryPanel } from '@/features/screening/AISummaryPanel'
 import { RuleSummaryPanel } from '@/features/screening/RuleSummaryPanel'
+import { AllergyRiskPanel } from '@/features/screening/AllergyRiskPanel'
 import { Sticker57Panel } from '@/features/screening/Sticker57'
 import { CounselingChecklist } from '@/features/screening/CounselingChecklist'
 import { PdfExportButton } from '@/features/screening/PdfExport'
@@ -211,6 +212,9 @@ export default function ScreeningPage() {
               </div>
 
               <RuleSummaryPanel patient={patient} drugs={drugs} alerts={alerts} />
+
+              {/* รวมสารกระตุ้นแพ้ + ระวังแพ้ข้าม (ไม่ match กับประวัติคนไข้ — แสดงเป็น info) */}
+              <AllergyRiskPanel drugs={drugs} />
 
               {/* รูปก่อน/หลัง ของยาที่เปลี่ยนบริษัท */}
               <SubstitutionScreenPanel drugs={drugs} />

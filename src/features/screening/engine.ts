@@ -459,21 +459,48 @@ export function buildNoCrushAlerts(drugs: DrugEntry[], patient: PatientInput): S
 }
 
 // ============ LASA ============
+// Two alert levels:
+//   • yellow "FYI similar drug exists" — single LASA-listed drug dispensed alone
+//   • red "BOTH LASA pair drugs in same Rx" — highest swap risk in real practice
 export function buildLasaAlerts(drugs: DrugEntry[], allDrugs: DrugMaster[]): ScreeningAlert[] {
   const alerts: ScreeningAlert[] = []
+  const rxIcodes = new Set(drugs.map((d) => d.icode))
   for (const d of drugs) {
     const lasa = d.master?.lasa_with
     if (!lasa || lasa.length === 0) continue
-    const pairs = lasa.map((p) => allDrugs.find((x) => nameEq(x.icode, p) || nameEq(x.drug_name, p)) ?? { drug_name: p, icode: p } as DrugMaster)
-    alerts.push({
-      id: `lasa_${d.icode}`,
-      type: 'LASA',
-      severity: 'yellow',
-      title: `⚠️ LASA: ${d.master!.drug_name} คล้ายกับ ${pairs.map((p) => p.drug_name).join(', ')}`,
-      detail: 'ชื่อ/หน้าตายาคล้ายกัน — ตรวจสอบให้แน่ใจว่าจ่ายถูกตัว',
-      recommendation: 'อ่านฉลากซ้ำ + tallman letter ถ้ามี',
-      drugs: [d.icode],
-    })
+    // Resolve each entry (icode preferred, falls back to free-text legacy).
+    const pairs = lasa.map(
+      (p) =>
+        allDrugs.find((x) => nameEq(x.icode, p) || nameEq(x.drug_name, p)) ??
+        ({ drug_name: p, icode: p } as DrugMaster),
+    )
+    // Only pairs that are ALSO present in this prescription → real swap risk.
+    const coOccurring = pairs.filter(
+      (p) => rxIcodes.has(p.icode) && p.icode !== d.icode,
+    )
+    if (coOccurring.length > 0) {
+      alerts.push({
+        id: `lasa_swap_${d.icode}`,
+        type: 'LASA',
+        severity: 'red',
+        title: `🚨 LASA ในใบสั่งเดียวกัน: ${d.master!.drug_name} + ${coOccurring.map((p) => p.drug_name).join(', ')}`,
+        detail:
+          'ใบสั่งนี้มียา LASA ที่คล้ายกันมากกว่า 1 ตัว — เสี่ยงสูงต่อการสับยา/จัดยาผิดตัว',
+        recommendation:
+          'แยกซองให้ชัด · ใช้ tall-man letter · double-check ก่อนจ่าย · อธิบายผู้ป่วยตอนรับยา',
+        drugs: [d.icode, ...coOccurring.map((p) => p.icode)],
+      })
+    } else {
+      alerts.push({
+        id: `lasa_${d.icode}`,
+        type: 'LASA',
+        severity: 'yellow',
+        title: `⚠️ LASA: ${d.master!.drug_name} คล้ายกับ ${pairs.map((p) => p.drug_name).join(', ')}`,
+        detail: 'ชื่อ/หน้าตายาคล้ายกัน — ตรวจสอบให้แน่ใจว่าจ่ายถูกตัว',
+        recommendation: 'อ่านฉลากซ้ำ + tallman letter ถ้ามี',
+        drugs: [d.icode],
+      })
+    }
   }
   return alerts
 }
