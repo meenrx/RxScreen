@@ -632,7 +632,8 @@ export async function unifyLabParamToCrCl(
     const batch = writeBatch(db)
     const slice = toUpdate.slice(i, i + BATCH_LIMIT)
     for (const { id, update } of slice) {
-      batch.update(doc(collection(db, 'LAB_RULES'), id), update)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      batch.update(doc(collection(db, 'LAB_RULES'), id), update as any)
     }
     try {
       await batch.commit()
