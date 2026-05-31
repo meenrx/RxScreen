@@ -8,6 +8,8 @@ export interface PatientInput {
   height?: number
   sex?: 'M' | 'F'
   scr?: number
+  /** eGFR/CrCl ที่กรอกตรง (mL/min) — ถ้ามี ใช้ค่านี้ปรับ dose ได้เลย ไม่ต้องคำนวณจาก SCr */
+  egfr?: number
   inr?: number
   /** อายุครรภ์ (สัปดาห์) ถ้าตั้งครรภ์ */
   pregnancy_weeks?: number

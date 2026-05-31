@@ -1,10 +1,25 @@
 import type { DrugEntry, PatientInput } from '@/types/screening'
+import { renalBasisOf } from '@/features/renal/calc'
 
 export type FieldId =
-  | 'age' | 'sex' | 'weight' | 'height' | 'scr' | 'inr'
+  | 'age' | 'sex' | 'weight' | 'height' | 'scr' | 'egfr' | 'inr'
   | 'allergies' | 'is_pregnant' | 'is_lactating' | 'g6pd' | 'smoking' | 'alcohol'
   | 'diseases'
   | 'k' | 'na' | 'albumin' | 'hb' | 'plt' | 'ast' | 'alt' | 'bilirubin' | 'glucose'
+
+/** คำที่บ่งชี้ว่าเป็น NSAID (เช็คจาก generic / drug_class / drug_category) */
+const NSAID_KEYS = [
+  'ibuprofen', 'naproxen', 'diclofenac', 'mefenamic', 'indomethacin', 'piroxicam',
+  'meloxicam', 'celecoxib', 'etoricoxib', 'ketorolac', 'aspirin', 'nsaid',
+  'nonsteroidal', 'anti-inflammatory', 'propionic', 'arcoxia', 'brufen',
+]
+
+function isNsaid(d: DrugEntry): boolean {
+  const hay = [
+    d.master?.generic_name, d.master?.drug_class, d.master?.drug_category, d.master?.drug_name, d.drug_name,
+  ].filter(Boolean).join(' ').toLowerCase()
+  return NSAID_KEYS.some((k) => hay.includes(k))
+}
 
 export interface RequiredField {
   id: FieldId
@@ -39,13 +54,23 @@ export function computeRequiredFields(drugs: DrugEntry[]): RequiredField[] {
 
   for (const d of drugs) {
     const name = d.master?.drug_name ?? d.icode
-    // 1) มี dose_meta → ต้องคำนวณ CrCl → age + weight + sex + scr (ใช้ ABW โดย default)
-    const hasRenal = d.labRules?.some((r) => r.dose_meta)
-    if (hasRenal) {
-      add('age', 'อายุ', 'ปี', `${name} → ปรับ dose ตาม CrCl`, 'high')
-      add('weight', 'น้ำหนัก', 'kg', `${name} → ปรับ dose ตาม CrCl`, 'high')
-      add('sex', 'เพศ', undefined, `${name} → ปรับ dose ตาม CrCl`, 'high')
-      add('scr', 'SCr', 'mg/dL', `${name} → ปรับ dose ตาม CrCl`, 'high')
+    // 1) มี dose_meta → ปรับ dose ตามไต
+    //    - rule ที่ใช้ CrCl → ขอ age+weight+sex+scr (คำนวณ Cockcroft-Gault)
+    //    - rule ที่ใช้ eGFR → ขอ eGFR ตรง ๆ ไม่ต้องคำนวณ
+    const renalRule = d.labRules?.find((r) => r.dose_meta)
+    if (renalRule) {
+      if (renalBasisOf(renalRule) === 'egfr') {
+        add('egfr', 'eGFR', 'mL/min', `${name} → ปรับ dose ตาม eGFR (กรอกค่าตรง)`, 'high')
+      } else {
+        add('age', 'อายุ', 'ปี', `${name} → ปรับ dose ตาม CrCl`, 'high')
+        add('weight', 'น้ำหนัก', 'kg', `${name} → ปรับ dose ตาม CrCl`, 'high')
+        add('sex', 'เพศ', undefined, `${name} → ปรับ dose ตาม CrCl`, 'high')
+        add('scr', 'SCr', 'mg/dL', `${name} → ปรับ dose ตาม CrCl`, 'high')
+      }
+    }
+    // 1.2) NSAID → ขอค่าไต (eGFR) เพื่อเช็คความปลอดภัย (เสี่ยง AKI)
+    if (isNsaid(d)) {
+      add('egfr', 'eGFR', 'mL/min', `${name} (NSAID) → ควรเช็คการทำงานของไต`, 'high')
     }
     // 1.5) ยาที่ต้องใช้ IBW → ขอส่วนสูงเพิ่ม
     //   (Aminoglycosides, Vancomycin, Phenytoin loading dose ฯลฯ)
@@ -70,11 +95,10 @@ export function computeRequiredFields(drugs: DrugEntry[]): RequiredField[] {
     if (d.master?.beers_avoid_elderly) {
       add('age', 'อายุ', 'ปี', `${name} อยู่ใน Beers (≥65 ปี)`, 'high')
     }
-    // 5) Pediatric dose → ขออายุ + น้ำหนัก
-    const hasPed = d.labRules?.some((r) => r.pediatric_dose)
+    // 5) Pediatric dose → ขอแค่ "น้ำหนัก" (คำนวณ mg/kg/dose) ไม่ต้องขอเพศ/อายุ
+    const hasPed = d.labRules?.some((r) => r.pediatric_dose || r.min_dose_kg || r.max_dose_kg)
     if (hasPed) {
-      add('age', 'อายุ', 'ปี', `${name} → เช็คขนาดยาเด็ก`, 'high')
-      add('weight', 'น้ำหนัก', 'kg', `${name} → เช็คขนาดยาเด็ก`, 'high')
+      add('weight', 'น้ำหนัก', 'kg', `${name} → คำนวณขนาดยาเด็ก (mg/kg/dose)`, 'high')
     }
     // 6) Smoking interaction
     if (d.master?.smoking_interaction) {
@@ -135,6 +159,7 @@ export function isFieldFilled(patient: PatientInput, extra: Record<string, unkno
     case 'height': return patient.height !== undefined && patient.height > 0
     case 'sex': return patient.sex !== undefined
     case 'scr': return patient.scr !== undefined && patient.scr > 0
+    case 'egfr': return patient.egfr !== undefined && patient.egfr > 0
     case 'inr': return patient.inr !== undefined && patient.inr > 0
     case 'allergies': return (patient.allergies?.length ?? 0) > 0
     case 'is_pregnant': return patient.is_pregnant !== undefined

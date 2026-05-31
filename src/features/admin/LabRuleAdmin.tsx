@@ -195,6 +195,22 @@ export function LabRuleAdmin() {
                   placeholder="CrCl<10:hold; CrCl 10-50:1g q24h; CrCl>50:1g q12h"
                   rows={2}
                 />
+                <div className="flex items-center gap-2 text-xs pt-1">
+                  <span className="text-muted-foreground">ฐานค่าไต:</span>
+                  {(['crcl', 'egfr'] as const).map((b) => {
+                    const activeBasis = (edit.renal_basis ?? 'crcl') === b
+                    return (
+                      <button
+                        key={b}
+                        type="button"
+                        onClick={() => setEdit({ ...edit, renal_basis: b })}
+                        className={`px-2.5 py-1 rounded-md border ${activeBasis ? 'bg-primary text-primary-foreground border-primary' : 'hover:bg-accent'}`}
+                      >
+                        {b === 'crcl' ? 'CrCl (ระบบคำนวณ)' : 'eGFR (กรอกค่าตรง)'}
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
 
               {/* Pediatric / dose limits */}
@@ -206,18 +222,28 @@ export function LabRuleAdmin() {
                     ระบบจะแสดงเมื่อผู้ป่วยอายุ &lt; 15 ปี
                   </HelpHint>
                 </div>
-                <div>
-                  <Label className="mb-1.5">pediatric_dose</Label>
-                  <Input value={edit.pediatric_dose ?? ''} onChange={(e) => setEdit({ ...edit, pediatric_dose: e.target.value })} placeholder="10-15 mg/kg/dose q6h, max 4 g/day" />
-                </div>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                   <div>
-                    <Label className="mb-1.5 text-xs">min mg/kg</Label>
+                    <Label className="mb-1.5">pediatric_dose (ข้อความอ้างอิง)</Label>
+                    <Input value={edit.pediatric_dose ?? ''} onChange={(e) => setEdit({ ...edit, pediatric_dose: e.target.value })} placeholder="10-15 mg/kg/dose q6h" />
+                  </div>
+                  <div>
+                    <Label className="mb-1.5">ความแรงต่อ 5 mL (ยาน้ำ)</Label>
+                    <Input value={edit.conc_per_5ml ?? ''} onChange={(e) => setEdit({ ...edit, conc_per_5ml: e.target.value })} placeholder="250 mg/5 mL" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  <div>
+                    <Label className="mb-1.5 text-xs">min mg/kg/dose</Label>
                     <Input value={edit.min_dose_kg ?? ''} onChange={(e) => setEdit({ ...edit, min_dose_kg: e.target.value })} placeholder="10" />
                   </div>
                   <div>
-                    <Label className="mb-1.5 text-xs">max mg/kg</Label>
+                    <Label className="mb-1.5 text-xs">max mg/kg/dose</Label>
                     <Input value={edit.max_dose_kg ?? ''} onChange={(e) => setEdit({ ...edit, max_dose_kg: e.target.value })} placeholder="15" />
+                  </div>
+                  <div>
+                    <Label className="mb-1.5 text-xs">frequency</Label>
+                    <Input value={edit.frequency ?? ''} onChange={(e) => setEdit({ ...edit, frequency: e.target.value })} placeholder="q6h" />
                   </div>
                   <div>
                     <Label className="mb-1.5 text-xs">max mg/day</Label>

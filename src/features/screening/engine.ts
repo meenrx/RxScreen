@@ -1,6 +1,6 @@
 import type { DdiOverride, DiseaseRule, DrugMaster, HadRule, LabRule } from '@/types/drug'
 import type { DrugEntry, PatientInput, ScreeningAlert } from '@/types/screening'
-import { calcCrCl, findMatchingDoseAction } from '@/features/renal/calc'
+import { calcCrCl, findMatchingDoseAction, renalBasisOf, computePediatricDose } from '@/features/renal/calc'
 
 function nameEq(a: string | undefined, b: string | undefined): boolean {
   if (!a || !b) return false
@@ -147,16 +147,33 @@ function labelSeverity(s: DiseaseRule['severity']) {
 }
 
 // ============ Renal ============
+/** หา GFR ที่ใช้ได้: ยา basis=egfr → ใช้ค่าที่กรอกตรง, basis=crcl → คำนวณ Cockcroft-Gault */
+function resolveGfr(
+  rule: { renal_basis?: 'crcl' | 'egfr'; dose_meta?: string; param?: string },
+  patient: PatientInput,
+): { gfr: number; label: 'eGFR' | 'CrCl' } | null {
+  const basis = renalBasisOf(rule)
+  if (basis === 'egfr') {
+    return patient.egfr !== undefined ? { gfr: patient.egfr, label: 'eGFR' } : null
+  }
+  // crcl — คำนวณถ้าข้อมูลครบ; ถ้าไม่ครบแต่ผู้ใช้กรอก eGFR มาก็ใช้แทนได้
+  if (patient.scr && patient.age && patient.weight && patient.sex) {
+    const { crcl } = calcCrCl({ age: patient.age, weight: patient.weight, height: patient.height, sex: patient.sex, scr: patient.scr })
+    return { gfr: crcl, label: 'CrCl' }
+  }
+  if (patient.egfr !== undefined) return { gfr: patient.egfr, label: 'eGFR' }
+  return null
+}
+
 export function buildRenalAlerts(drugs: DrugEntry[], patient: PatientInput): ScreeningAlert[] {
-  if (!patient.scr || !patient.age || !patient.weight || !patient.sex) return []
-  const { crcl } = calcCrCl({
-    age: patient.age, weight: patient.weight, height: patient.height, sex: patient.sex, scr: patient.scr,
-  })
   const alerts: ScreeningAlert[] = []
   for (const drug of drugs) {
     const rule = drug.labRules?.find((r) => r.dose_meta)
     if (!rule?.dose_meta) continue
-    const action = findMatchingDoseAction(rule.dose_meta, crcl)
+    const resolved = resolveGfr(rule, patient)
+    if (!resolved) continue
+    const { gfr, label } = resolved
+    const action = findMatchingDoseAction(rule.dose_meta, gfr)
     if (!action) continue
     const sev: ScreeningAlert['severity'] =
       /hold|avoid|contraindicat/i.test(action) ? 'red' :
@@ -165,7 +182,7 @@ export function buildRenalAlerts(drugs: DrugEntry[], patient: PatientInput): Scr
       id: `renal_${drug.icode}`,
       type: 'RENAL',
       severity: sev,
-      title: `⚠️ CrCl = ${crcl} mL/min → ปรับ ${drug.master?.drug_name ?? drug.icode}`,
+      title: `⚠️ ${label} = ${gfr} mL/min → ปรับ ${drug.master?.drug_name ?? drug.icode}`,
       detail: `แนะนำ: ${action}`,
       drugs: [drug.icode],
       source: rule,
@@ -177,18 +194,39 @@ export function buildRenalAlerts(drugs: DrugEntry[], patient: PatientInput): Scr
 
 // ============ Pediatric ============
 export function buildPediatricAlerts(drugs: DrugEntry[], patient: PatientInput): ScreeningAlert[] {
-  if (!patient.age || patient.age >= 15) return []
+  // ใช้ "น้ำหนัก" เป็นหลัก (ไม่ต้องใช้เพศ); แสดงเมื่อไม่ใช่ผู้ใหญ่ชัดเจน
+  if (!patient.weight) return []
+  if (patient.age !== undefined && patient.age >= 15) return []
+  const wt = patient.weight
   const alerts: ScreeningAlert[] = []
   for (const d of drugs) {
-    const rule = d.labRules?.find((r) => r.pediatric_dose)
-    if (!rule?.pediatric_dose) continue
-    const weightInfo = patient.weight ? ` (น้ำหนัก ${patient.weight} kg)` : ''
+    const rule = d.labRules?.find((r) => r.pediatric_dose || r.min_dose_kg || r.max_dose_kg)
+    if (!rule) continue
+    const calc = computePediatricDose(wt, rule)
+    const strength = d.master?.strength ? `ความแรง ${d.master.strength}` : null
+
+    let detail: string
+    if (calc && (calc.minMgPerDose !== undefined || calc.maxMgPerDose !== undefined)) {
+      const mgRange = [calc.minMgPerDose, calc.maxMgPerDose].filter((x) => x !== undefined).join('–')
+      const lines: string[] = [`น้ำหนัก ${wt} kg → ${mgRange} mg/ครั้ง`]
+      if (calc.mgPerMl && (calc.minMlPerDose !== undefined || calc.maxMlPerDose !== undefined)) {
+        const mlRange = [calc.minMlPerDose, calc.maxMlPerDose].filter((x) => x !== undefined).join('–')
+        lines.push(`= ${mlRange} mL/ครั้ง (ความแรง ${calc.concLabel})`)
+      }
+      if (calc.frequency) lines.push(`ความถี่: ${calc.frequency}`)
+      if (calc.maxPerDay !== undefined) lines.push(`ไม่เกิน ${calc.maxPerDay} mg/วัน`)
+      if (rule.pediatric_dose) lines.push(`อ้างอิง: ${rule.pediatric_dose}`)
+      detail = lines.join(' · ')
+    } else {
+      detail = [rule.pediatric_dose, strength].filter(Boolean).join(' · ') || 'ดูขนาดยาเด็ก'
+    }
+
     alerts.push({
       id: `ped_${d.icode}`,
       type: 'PED',
       severity: 'blue',
-      title: `ขนาดยาเด็ก: ${d.master?.drug_name ?? d.icode}${weightInfo}`,
-      detail: rule.pediatric_dose,
+      title: `👶 ขนาดยาเด็ก: ${d.master?.drug_name ?? d.icode}`,
+      detail,
       drugs: [d.icode],
       source: rule,
     })

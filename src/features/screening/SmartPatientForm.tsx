@@ -78,7 +78,7 @@ export function SmartPatientForm({ drugs, value, onChange }: Props) {
           </div>
         </div>
 
-        {(isRequired('age') || isRequired('sex') || isRequired('weight') || isRequired('height') || isRequired('scr') || isRequired('inr')) && (
+        {(isRequired('age') || isRequired('sex') || isRequired('weight') || isRequired('height') || isRequired('scr') || isRequired('egfr') || isRequired('inr')) && (
           <Section title="ข้อมูลทางคลินิก">
             <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
               {isRequired('age') && (
@@ -110,6 +110,11 @@ export function SmartPatientForm({ drugs, value, onChange }: Props) {
               {isRequired('scr') && (
                 <FieldBlock label="SCr" unit="mg/dL" missing={isMissing('scr')}>
                   <Input type="number" inputMode="decimal" step="0.01" value={value.scr ?? ''} onChange={(e) => set('scr', e.target.value ? +e.target.value : undefined)} className={cn('h-11 text-lg', isMissing('scr') && 'required-input')} />
+                </FieldBlock>
+              )}
+              {isRequired('egfr') && (
+                <FieldBlock label="eGFR" unit="mL/min" missing={isMissing('egfr')}>
+                  <Input type="number" inputMode="decimal" step="1" value={value.egfr ?? ''} onChange={(e) => set('egfr', e.target.value ? +e.target.value : undefined)} className={cn('h-11 text-lg', isMissing('egfr') && 'required-input')} />
                 </FieldBlock>
               )}
               {isRequired('inr') && (

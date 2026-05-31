@@ -108,7 +108,12 @@ export interface LabRule {
   dose_check?: string
   dose_meta?: string
   renal_dose_rules?: string
+  /** ฐานการปรับ dose ตามไต: 'crcl' = คำนวณ Cockcroft-Gault (ขอ age/weight/sex/scr),
+   *  'egfr' = ให้ผู้ใช้กรอก eGFR ตรง ๆ. ไม่ระบุ = เดาจาก dose_meta/param (default crcl) */
+  renal_basis?: 'crcl' | 'egfr'
   pediatric_dose?: string
+  /** ความแรงยาน้ำต่อ 5 mL เช่น "250 mg/5 mL" หรือเลข mg ต่อ 5mL — ใช้คำนวณ mL/dose เด็ก */
+  conc_per_5ml?: string
   /** ข้อบ่งใช้ */
   indication?: string
   /** mg/kg minimum */

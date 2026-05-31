@@ -130,3 +130,81 @@ export function findMatchingDoseAction(meta: string | undefined, crcl: number): 
   const matched = rules.find((r) => r.matches(crcl))
   return matched ? matched.action : null
 }
+
+// ============ Renal basis (CrCl vs eGFR) ============
+interface RenalRuleLike {
+  renal_basis?: 'crcl' | 'egfr'
+  dose_meta?: string
+  param?: string
+}
+
+/** ตัดสินว่ายา/rule นี้ใช้ CrCl (คำนวณ) หรือ eGFR (กรอกตรง) */
+export function renalBasisOf(rule: RenalRuleLike): 'crcl' | 'egfr' {
+  if (rule.renal_basis === 'egfr' || rule.renal_basis === 'crcl') return rule.renal_basis
+  const hay = `${rule.dose_meta ?? ''} ${rule.param ?? ''}`.toLowerCase()
+  // ถ้าเขียนกฎด้วย eGFR/GFR และไม่ได้อ้าง CrCl → ใช้ eGFR ตรง
+  if (/egfr|gfr/.test(hay) && !/crcl|ccr|cockcroft/.test(hay)) return 'egfr'
+  return 'crcl'
+}
+
+// ============ Pediatric dose (mg/kg/dose + ความแรงต่อ 5 mL) ============
+function toNum(s: string | number | undefined): number | undefined {
+  if (s === undefined || s === '') return undefined
+  const n = typeof s === 'number' ? s : Number(s)
+  return Number.isFinite(n) ? n : undefined
+}
+
+/** แปลงความแรงยาน้ำ → mg ต่อ 1 mL. รองรับ "250 mg/5 mL", "250/5", หรือเลขเดียว (=mg ต่อ 5mL) */
+export function parseConcMgPerMl(s: string | undefined): number | null {
+  if (!s) return null
+  const m = s.match(/(\d+(?:\.\d+)?)\s*(?:mg)?\s*\/\s*(\d+(?:\.\d+)?)\s*(?:ml|มล)/i)
+  if (m) {
+    const mg = parseFloat(m[1]); const ml = parseFloat(m[2])
+    return ml > 0 ? mg / ml : null
+  }
+  const single = s.match(/(\d+(?:\.\d+)?)/)
+  if (single) return parseFloat(single[1]) / 5 // สมมุติว่าเป็น mg ต่อ 5 mL
+  return null
+}
+
+export interface PediatricRuleLike {
+  min_dose_kg?: string | number
+  max_dose_kg?: string | number
+  max_dose_day?: string | number
+  conc_per_5ml?: string
+  concentration?: string
+  frequency?: string
+  pediatric_dose?: string
+}
+
+export interface PediatricDoseResult {
+  minMgPerDose?: number
+  maxMgPerDose?: number
+  mgPerMl?: number | null
+  minMlPerDose?: number
+  maxMlPerDose?: number
+  concLabel?: string
+  frequency?: string
+  maxPerDay?: number
+}
+
+/** คำนวณโดสเด็กจากน้ำหนัก × mg/kg/dose แล้วแปลงเป็น mL ถ้ามีความเข้มข้น */
+export function computePediatricDose(weightKg: number, rule: PediatricRuleLike): PediatricDoseResult | null {
+  const minKg = toNum(rule.min_dose_kg)
+  const maxKg = toNum(rule.max_dose_kg)
+  if (minKg === undefined && maxKg === undefined) return null
+  const concStr = rule.conc_per_5ml ?? rule.concentration
+  const mgPerMl = parseConcMgPerMl(concStr)
+  const minMg = minKg !== undefined ? +(minKg * weightKg).toFixed(1) : undefined
+  const maxMg = maxKg !== undefined ? +(maxKg * weightKg).toFixed(1) : undefined
+  return {
+    minMgPerDose: minMg,
+    maxMgPerDose: maxMg,
+    mgPerMl,
+    minMlPerDose: mgPerMl && minMg !== undefined ? +(minMg / mgPerMl).toFixed(1) : undefined,
+    maxMlPerDose: mgPerMl && maxMg !== undefined ? +(maxMg / mgPerMl).toFixed(1) : undefined,
+    concLabel: concStr,
+    frequency: rule.frequency,
+    maxPerDay: toNum(rule.max_dose_day),
+  }
+}
