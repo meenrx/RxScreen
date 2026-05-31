@@ -108,6 +108,13 @@ service cloud.firestore {
       allow write: if isActive();
     }
 
+    // === INTERVENTION — บันทึก off/เปลี่ยนยา + มูลค่าประหยัดสะสม ===
+    match /INTERVENTION/{docId} {
+      allow read: if isActive();
+      allow create, update: if isActive();
+      allow delete: if hasAnyRole(['admin', 'pharmacist']);
+    }
+
     // === Tools logs ===
     match /ADR_REPORTS/{docId} {
       allow read: if isActive();

@@ -2,12 +2,13 @@ import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
-  ClipboardCheck, Activity, Pill, Baby, AlertTriangle, Database, TrendingUp, Users, Sparkles, ArrowRight, Stethoscope,
+  ClipboardCheck, Activity, Pill, Baby, AlertTriangle, Database, TrendingUp, Users, Sparkles, ArrowRight, Stethoscope, PiggyBank, Coins,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useDrugs, useDdiOverrides } from '@/features/catalog/hooks'
+import { useInterventions, sumSaved } from '@/features/intervention/hooks'
 import { listAllHistory } from '@/features/history/api'
 import { useAuthStore } from '@/features/auth/authStore'
 import { formatBE, formatBEDateTime } from '@/lib/format'
@@ -17,6 +18,13 @@ export default function DashboardPage() {
   const { data: drugs = [] } = useDrugs()
   const { data: ddi = [] } = useDdiOverrides()
   const { data: history = [] } = useQuery({ queryKey: ['history-all'], queryFn: () => listAllHistory(200) })
+  const { data: interventions = [] } = useInterventions()
+
+  const totalSaved = useMemo(() => sumSaved(interventions), [interventions])
+  const topInterventions = useMemo(
+    () => [...interventions].sort((a, b) => (b.total_saved ?? 0) - (a.total_saved ?? 0)).slice(0, 6),
+    [interventions],
+  )
 
   const today = new Date()
   const todayList = useMemo(() => history.filter((h) => sameDay(h.createdAt, today)), [history])
@@ -155,6 +163,58 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Intervention & มูลค่าประหยัด */}
+      <Card className="soft-card overflow-hidden">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <span className="size-7 rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 grid place-items-center">
+              <PiggyBank className="size-4" />
+            </span>
+            มูลค่าประหยัดจาก Intervention
+          </CardTitle>
+          <CardDescription>จากการ off / เปลี่ยนยา แล้วหมอสั่งซ้ำ (จำนวน × ราคาทุน)</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white p-5 flex items-center gap-4">
+            <Coins className="size-9 opacity-90" />
+            <div>
+              <div className="text-emerald-50 text-xs">ประหยัดได้รวมทั้งหมด</div>
+              <div className="text-3xl font-bold leading-tight">
+                {totalSaved.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} บาท
+              </div>
+              <div className="text-emerald-100 text-xs mt-0.5">{interventions.length} รายการ intervention</div>
+            </div>
+          </div>
+
+          {topInterventions.length === 0 ? (
+            <p className="text-sm text-muted-foreground italic">
+              ยังไม่มี intervention — บันทึกได้จากหน้าคัดกรอง (ส่วน "Intervention & มูลค่าประหยัด")
+            </p>
+          ) : (
+            <div className="space-y-1.5">
+              {topInterventions.map((i) => (
+                <div key={i.id} className="flex items-center gap-2 py-2 border-b last:border-0">
+                  <Badge variant={i.status === 'off' ? 'red' : 'orange'} className="shrink-0">
+                    {i.status === 'off' ? 'off' : 'เปลี่ยน'}
+                  </Badge>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium text-sm truncate">{i.drug_name}</div>
+                    <div className="text-[11px] text-muted-foreground">
+                      HN {i.hn} · สั่งซ้ำ {i.reorder_count} ครั้ง · {i.total_qty} หน่วย
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="font-semibold text-emerald-700 dark:text-emerald-300 text-sm">
+                      {(i.total_saved ?? 0).toLocaleString()} ฿
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* System status */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">

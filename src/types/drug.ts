@@ -222,6 +222,49 @@ export interface AppConfig {
   anthropic_model?: string
   hospital_name?: string
   hospital_address?: string
+  /** เกณฑ์ราคาต่อหน่วย (บาท) ที่ถือว่า "ยาแพง" — ราคาขาย/ทุน ≥ ค่านี้จะแจ้งเตือน (0 = ปิด) */
+  expensive_unit_price_threshold?: number
+  updatedAt?: Date
+}
+
+/** เหตุการณ์ที่หมอสั่งยาที่ถูก off ซ้ำ → บันทึกจำนวนเพื่อคำนวณมูลค่าประหยัด */
+export interface InterventionEvent {
+  /** วันที่ (ISO string — เลี่ยงเก็บ Date ใน array) */
+  date: string
+  /** จำนวนที่หมอสั่งรอบนี้ */
+  qty: number
+  /** มูลค่าประหยัด = qty × unit_cost */
+  saved: number
+  pharmacist_name?: string
+}
+
+/** INTERVENTION — บันทึกการ off/เปลี่ยนยา ต่อผู้ป่วย (HN) + มูลค่าประหยัดสะสม */
+export interface Intervention {
+  id?: string
+  hn: string
+  patient_name?: string
+  icode: string
+  drug_name: string
+  generic_name?: string
+  /** off = หยุดยา, switched = เปลี่ยนเป็นยาอื่น */
+  status: 'off' | 'switched'
+  /** เหตุผล เช่น ยาแพง / ยาซ้ำซ้อน / อื่น ๆ */
+  reason?: string
+  /** ยาทางเลือกที่เปลี่ยนไปใช้ (กรณี switched) */
+  alternative_name?: string
+  /** ราคาทุน/ขาย ณ เวลาบันทึก (snapshot) */
+  unit_cost?: number
+  unit_price?: number
+  /** จำนวนครั้งที่หมอสั่งซ้ำหลัง off */
+  reorder_count: number
+  /** จำนวนหน่วยรวมที่สั่งซ้ำ */
+  total_qty: number
+  /** มูลค่าประหยัดสะสม (บาท) = total_qty × unit_cost */
+  total_saved: number
+  events?: InterventionEvent[]
+  pharmacist_uid: string
+  pharmacist_name: string
+  createdAt: Date
   updatedAt?: Date
 }
 

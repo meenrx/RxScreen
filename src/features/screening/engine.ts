@@ -554,6 +554,38 @@ export function buildLifestyleAlerts(drugs: DrugEntry[], patient: PatientInput):
   return alerts
 }
 
+// ============ COST — ยาราคาสูง / บัญชียาพิเศษ ============
+/** บัญชียา ง และ จ (รวม จ(2)) = ยาราคาสูง/เข้าถึงยาก ตาม NLEM */
+const HIGH_COST_ACCOUNTS = ['ง', 'จ']
+
+export function buildCostAlerts(drugs: DrugEntry[], threshold?: number): ScreeningAlert[] {
+  const alerts: ScreeningAlert[] = []
+  for (const d of drugs) {
+    const m = d.master
+    if (!m) continue
+    const acct = (m.drug_account ?? '').trim()
+    const highAcct = HIGH_COST_ACCOUNTS.some((a) => acct.startsWith(a))
+    // ราคาที่ใช้เทียบ — ใช้ราคาขายก่อน ถ้าไม่มีใช้ราคาทุน
+    const price = m.unit_price ?? m.unit_cost
+    const overThreshold = threshold !== undefined && threshold > 0 && price !== undefined && price >= threshold
+    if (!highAcct && !overThreshold) continue
+    const reasons: string[] = []
+    if (overThreshold) reasons.push(`ราคา ${price} บาท/หน่วย (เกณฑ์ ≥ ${threshold})`)
+    if (highAcct) reasons.push(`บัญชียา ${acct} (ราคาสูง/เข้าถึงยาก)`)
+    alerts.push({
+      id: `cost_${d.icode}`,
+      type: 'COST',
+      severity: highAcct ? 'orange' : 'yellow',
+      title: `💰 ยาราคาสูง: ${m.drug_name}`,
+      detail: reasons.join(' · '),
+      recommendation: 'พิจารณายาทางเลือกที่คุ้มค่ากว่า หากเหมาะสม — แล้วบันทึก intervention',
+      drugs: [d.icode],
+      source: m,
+    })
+  }
+  return alerts
+}
+
 export interface ScreenContext {
   drugs: DrugEntry[]
   patient: PatientInput
@@ -562,12 +594,15 @@ export interface ScreenContext {
   diseaseRules: DiseaseRule[]
   drugMasters: DrugMaster[]
   hadRules?: HadRule[]
+  /** เกณฑ์ราคาต่อหน่วยที่ถือว่าแพง (บาท) — undefined/0 = เช็คเฉพาะบัญชียา ง/จ */
+  expensiveThreshold?: number
 }
 
 export function runScreening(ctx: ScreenContext): ScreeningAlert[] {
   return [
     ...buildAllergyAlerts(ctx.drugs, ctx.patient.allergies),
     ...buildHadAlerts(ctx.drugs, ctx.hadRules ?? []),
+    ...buildCostAlerts(ctx.drugs, ctx.expensiveThreshold),
     ...buildG6pdAlerts(ctx.drugs, ctx.patient),
     ...buildDdiAlerts(ctx.drugs, ctx.ddiList),
     ...buildPregnancyAlerts(ctx.drugs, ctx.patient),

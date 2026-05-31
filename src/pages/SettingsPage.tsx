@@ -25,6 +25,7 @@ function SettingsContent() {
   const [showKey, setShowKey] = useState(false)
   const [hospitalName, setHospitalName] = useState('โรงพยาบาลรือเสาะ')
   const [hospitalAddress, setHospitalAddress] = useState('')
+  const [expensiveThreshold, setExpensiveThreshold] = useState('')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -39,6 +40,11 @@ function SettingsContent() {
           setHospitalName(d.hospital_name ?? 'โรงพยาบาลรือเสาะ')
           setHospitalAddress(d.hospital_address ?? '')
         }
+        const scrSnap = await getDoc(doc(db, 'CONFIG', 'screening'))
+        if (scrSnap.exists()) {
+          const t = scrSnap.data().expensive_unit_price_threshold
+          if (typeof t === 'number') setExpensiveThreshold(String(t))
+        }
       } catch (e) {
         console.error(e)
       }
@@ -50,6 +56,11 @@ function SettingsContent() {
     try {
       await saveConfig('anthropic', { anthropic_api_key: apiKey, anthropic_model: model })
       await saveConfig('hospital', { hospital_name: hospitalName, hospital_address: hospitalAddress })
+      const thr = Number(expensiveThreshold)
+      await saveConfig('screening', {
+        // 0 = ปิดการเช็คตามราคา (เช็คเฉพาะบัญชี ง/จ)
+        expensive_unit_price_threshold: expensiveThreshold.trim() !== '' && Number.isFinite(thr) && thr > 0 ? thr : 0,
+      })
       toast.success('บันทึกการตั้งค่าเรียบร้อย')
     } catch (e) {
       toast.error('บันทึกไม่สำเร็จ: ' + (e as Error).message)
@@ -99,6 +110,23 @@ function SettingsContent() {
         <CardContent className="space-y-3">
           <div><Label>ชื่อโรงพยาบาล</Label><Input value={hospitalName} onChange={(e) => setHospitalName(e.target.value)} /></div>
           <div><Label>ที่อยู่</Label><Input value={hospitalAddress} onChange={(e) => setHospitalAddress(e.target.value)} /></div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>เกณฑ์ยาราคาสูง (Cost alert)</CardTitle>
+          <CardDescription>
+            ตอนคัดกรอง ถ้ายามีราคาต่อหน่วย (ขาย/ทุน) ≥ ค่านี้ จะขึ้นแจ้งเตือน 💰 — เว้นว่างหรือ 0 = เช็คเฉพาะบัญชียา ง/จ
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Label>ราคาต่อหน่วยที่ถือว่าแพง (บาท)</Label>
+          <Input
+            type="number" min={0} value={expensiveThreshold}
+            onChange={(e) => setExpensiveThreshold(e.target.value)}
+            placeholder="เช่น 50"
+          />
         </CardContent>
       </Card>
 

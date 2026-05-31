@@ -1,5 +1,6 @@
 import { useMemo, useState, useCallback } from 'react'
-import { ClipboardCheck, RotateCcw, Save, ScanLine, Pill, Stethoscope, Sparkles, ListChecks, Printer, FileText } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { ClipboardCheck, RotateCcw, Save, ScanLine, Pill, Stethoscope, Sparkles, ListChecks, Printer, FileText, Coins } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
@@ -18,9 +19,11 @@ import { DiseaseScreeningPanel } from '@/features/disease/DiseaseScreeningPanel'
 import { useScreeningData } from '@/features/screening/useScreeningData'
 import { useScreeningStore } from '@/features/screening/screeningStore'
 import { runScreening } from '@/features/screening/engine'
+import { InterventionSection } from '@/features/intervention/InterventionSection'
+import { InterventionReorderWatcher } from '@/features/intervention/InterventionReorderWatcher'
 import { logDispensing } from '@/features/history/api'
 import { useAuthStore } from '@/features/auth/authStore'
-import { getDrugByIcode, listLabRulesByIcode } from '@/features/catalog/api'
+import { getConfig, getDrugByIcode, listLabRulesByIcode } from '@/features/catalog/api'
 import { toast } from 'sonner'
 import type { DrugEntry } from '@/types/screening'
 
@@ -40,11 +43,13 @@ export default function ScreeningPage() {
 
   const user = useAuthStore((s) => s.user)
   const { drugMasters, labRules, ddiList, diseaseRules, isLoading } = useScreeningData()
+  const { data: screeningConfig } = useQuery({ queryKey: ['config-screening'], queryFn: () => getConfig('screening') })
+  const expensiveThreshold = screeningConfig?.expensive_unit_price_threshold
 
   const alerts = useMemo(() => {
     if (drugs.length === 0) return []
-    return runScreening({ drugs, patient, ddiList, labRules, diseaseRules, drugMasters })
-  }, [drugs, patient, ddiList, labRules, diseaseRules, drugMasters])
+    return runScreening({ drugs, patient, ddiList, labRules, diseaseRules, drugMasters, expensiveThreshold })
+  }, [drugs, patient, ddiList, labRules, diseaseRules, drugMasters, expensiveThreshold])
 
   const counts = useMemo(() => ({
     red: alerts.filter((a) => a.severity === 'red').length,
@@ -184,6 +189,9 @@ export default function ScreeningPage() {
 
           {hasResults && (
             <>
+              {/* เฝ้าดูยาที่เคย off แล้วถูกสั่งซ้ำ → เด้ง popup ถามจำนวน (mount เสมอ) */}
+              <InterventionReorderWatcher drugs={drugs} patient={patient} />
+
               {/* Results header */}
               <div className="flex items-center justify-between gap-2 pt-2">
                 <h2 className="text-base font-bold flex items-center gap-2">
@@ -226,6 +234,15 @@ export default function ScreeningPage() {
                 defaultOpen={false}
               >
                 <CounselingChecklist drugs={drugs} />
+              </CollapsibleSection>
+
+              <CollapsibleSection
+                title="Intervention & มูลค่าประหยัด"
+                subtitle="บันทึก off/เปลี่ยนยา · ยาที่เคย off แล้วสั่งซ้ำจะเด้ง popup ถามจำนวน"
+                icon={<div className="size-8 rounded-lg bg-amber-100 dark:bg-amber-950/40 text-amber-600 grid place-items-center"><Coins className="size-4" /></div>}
+                defaultOpen={false}
+              >
+                <InterventionSection drugs={drugs} patient={patient} />
               </CollapsibleSection>
 
               <CollapsibleSection

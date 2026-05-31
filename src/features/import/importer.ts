@@ -296,11 +296,17 @@ export async function importDrugAccountSheet(
       .map((r) => {
         const icode = r.icode.trim()
         const name = (r.name || '').trim()
+        // ชื่อยา = name + strength + dosageform (รวม) ยุบช่องว่างซ้ำ
+        const drugName = [name, r.strength?.trim(), r.dosageform?.trim()]
+          .filter((s) => s && s !== '')
+          .join(' ')
+          .replace(/\s+/g, ' ')
+          .trim()
         return {
           id: icode,
           data: sanitize({
             icode,
-            drug_name: name,
+            drug_name: drugName || name,
             generic_name: r.generic_name?.trim(),
             strength: r.strength?.trim(),
             pack_unit: r.units?.trim(),
@@ -313,6 +319,8 @@ export async function importDrugAccountSheet(
             unit_cost: toNumber(r.unitcost),
             unit_price: toNumber(r.unitprice),
             pregnancy_category: normPreg(r.pregnancy),
+            // HAD = ชื่อยามีคำว่า (HAD)
+            is_HAD: /\(HAD\)/i.test(name) ? true : undefined,
             active: true,
           }),
         }

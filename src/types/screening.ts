@@ -38,7 +38,7 @@ export type AlertType =
   | 'DDI' | 'LAB' | 'DISEASE' | 'DRP' | 'RENAL' | 'PED'
   | 'ALLERGY' | 'HAD' | 'LASA' | 'PREG' | 'LACT' | 'BEERS' | 'G6PD'
   | 'FOOD' | 'SMOKING' | 'ALCOHOL' | 'TDM'
-  | 'TIMING' | 'DUE' | 'NO_CRUSH'
+  | 'TIMING' | 'DUE' | 'NO_CRUSH' | 'COST'
 
 export interface ScreeningAlert {
   id: string
