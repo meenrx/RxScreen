@@ -219,41 +219,44 @@ export default function ScreeningPage() {
                 <GroupedAlertList alerts={alerts} />
               </CollapsibleSection>
 
-              <CollapsibleSection
-                title="สรุปด้วย AI (Claude Haiku)"
-                subtitle={aiText ? '✓ สรุปเรียบร้อย' : 'กดปุ่ม "สรุปด้วย AI" เพื่อให้ Claude วิเคราะห์'}
-                icon={<div className="size-8 rounded-lg bg-violet-100 dark:bg-violet-950/40 text-violet-600 grid place-items-center"><Sparkles className="size-4" /></div>}
-                defaultOpen={!!aiText}
-              >
-                <AISummaryPanel patient={patient} drugs={drugs} alerts={alerts} onResult={setAiText} />
-              </CollapsibleSection>
+              {/* ส่วนรอง — จัด 2 คอลัมน์บนจอกว้าง ใช้พื้นที่คุ้ม (มือถือเรียงเดี่ยว) */}
+              <div className="grid lg:grid-cols-2 gap-3 items-start">
+                <CollapsibleSection
+                  title="สรุปด้วย AI (Claude Haiku)"
+                  subtitle={aiText ? '✓ สรุปเรียบร้อย' : 'กดปุ่ม "สรุปด้วย AI" เพื่อให้ Claude วิเคราะห์'}
+                  icon={<div className="size-8 rounded-lg bg-violet-100 dark:bg-violet-950/40 text-violet-600 grid place-items-center"><Sparkles className="size-4" /></div>}
+                  defaultOpen={!!aiText}
+                >
+                  <AISummaryPanel patient={patient} drugs={drugs} alerts={alerts} onResult={setAiText} />
+                </CollapsibleSection>
 
-              <CollapsibleSection
-                title="Counseling Checklist"
-                subtitle="ติ๊กเมื่ออธิบายผู้ป่วยแล้ว"
-                icon={<div className="size-8 rounded-lg bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 grid place-items-center"><ListChecks className="size-4" /></div>}
-                defaultOpen={false}
-              >
-                <CounselingChecklist drugs={drugs} />
-              </CollapsibleSection>
+                <CollapsibleSection
+                  title="Counseling Checklist"
+                  subtitle="ติ๊กเมื่ออธิบายผู้ป่วยแล้ว"
+                  icon={<div className="size-8 rounded-lg bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 grid place-items-center"><ListChecks className="size-4" /></div>}
+                  defaultOpen={false}
+                >
+                  <CounselingChecklist drugs={drugs} />
+                </CollapsibleSection>
 
-              <CollapsibleSection
-                title="Intervention & มูลค่าประหยัด"
-                subtitle="บันทึก off/เปลี่ยนยา · ยาที่เคย off แล้วสั่งซ้ำจะเด้ง popup ถามจำนวน"
-                icon={<div className="size-8 rounded-lg bg-amber-100 dark:bg-amber-950/40 text-amber-600 grid place-items-center"><Coins className="size-4" /></div>}
-                defaultOpen={false}
-              >
-                <InterventionSection drugs={drugs} patient={patient} />
-              </CollapsibleSection>
+                <CollapsibleSection
+                  title="Intervention & มูลค่าประหยัด"
+                  subtitle="บันทึก off/เปลี่ยนยา · ยาที่เคย off แล้วสั่งซ้ำจะเด้ง popup ถามจำนวน"
+                  icon={<div className="size-8 rounded-lg bg-amber-100 dark:bg-amber-950/40 text-amber-600 grid place-items-center"><Coins className="size-4" /></div>}
+                  defaultOpen={false}
+                >
+                  <InterventionSection drugs={drugs} patient={patient} />
+                </CollapsibleSection>
 
-              <CollapsibleSection
-                title="สติ๊กเกอร์ 5×7 cm"
-                subtitle="ปริ้นต์ติดซองยา (กรอก HN/ชื่อตอนพิมพ์)"
-                icon={<div className="size-8 rounded-lg bg-sky-100 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 grid place-items-center"><Printer className="size-4" /></div>}
-                defaultOpen={false}
-              >
-                <Sticker57Panel drugs={drugs} patient={patient} />
-              </CollapsibleSection>
+                <CollapsibleSection
+                  title="สติ๊กเกอร์ 5×7 cm"
+                  subtitle="ปริ้นต์ติดซองยา (กรอก HN/ชื่อตอนพิมพ์)"
+                  icon={<div className="size-8 rounded-lg bg-sky-100 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 grid place-items-center"><Printer className="size-4" /></div>}
+                  defaultOpen={false}
+                >
+                  <Sticker57Panel drugs={drugs} patient={patient} />
+                </CollapsibleSection>
+              </div>
             </>
           )}
         </TabsContent>
