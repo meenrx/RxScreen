@@ -1,9 +1,8 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Wrench, Pill, Syringe, History as HistoryIcon, Calculator, Loader2, Search, AlertOctagon, ArrowRightLeft, MessageSquarePlus, ClipboardList, Wind, Megaphone } from 'lucide-react'
+import { Wrench, Pill, Syringe, Loader2, AlertOctagon, ClipboardList, Megaphone } from 'lucide-react'
 import { AdrTab } from '@/features/tools/AdrTab'
-import { DischargeTab, HandoffTab, SubstitutionTab } from '@/features/tools/MoreTabs'
-import { InhalerTab } from '@/features/tools/InhalerTab'
+import { SubstitutionTab } from '@/features/tools/MoreTabs'
 import { RecallTab } from '@/features/tools/RecallTab'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
@@ -11,13 +10,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/PageHeader'
 import { listInrProtocol, listTwdTable, adjustWarfarin } from '@/features/tools/warfarinAdjuster'
 import { STANDARD_SCALE, AGGRESSIVE_SCALE, calcInsulinSlidingScale } from '@/features/tools/insulin'
-import { getPatientRefillHistory, type DrugRefillInfo } from '@/features/tools/refill'
-import { formatBE, formatBEDateTime } from '@/lib/format'
-import { toast } from 'sonner'
 
 export default function ToolsPage() {
   return (
@@ -26,28 +21,20 @@ export default function ToolsPage() {
         icon={Wrench}
         iconColor="from-violet-500 to-purple-600"
         title="เครื่องมือเภสัชกร"
-        description="Warfarin / Insulin / ตรวจ Compliance — เลือก tab ที่ต้องการ"
+        description="Warfarin / Insulin / ADR / Substitute / Recall — เลือก tab ที่ต้องการ"
       />
       <Tabs defaultValue="warfarin">
         <TabsList className="bg-card shadow-sm border h-auto overflow-x-auto max-w-full flex-wrap p-1">
           <TabsTrigger value="warfarin" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-500 data-[state=active]:to-purple-600 data-[state=active]:text-white px-3 h-9"><Pill className="size-4" /> Warfarin</TabsTrigger>
           <TabsTrigger value="insulin" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500 data-[state=active]:to-sky-600 data-[state=active]:text-white px-3 h-9"><Syringe className="size-4" /> Insulin</TabsTrigger>
-          <TabsTrigger value="refill" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500 data-[state=active]:to-teal-600 data-[state=active]:text-white px-3 h-9"><HistoryIcon className="size-4" /> Refill</TabsTrigger>
           <TabsTrigger value="adr" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-500 data-[state=active]:to-rose-600 data-[state=active]:text-white px-3 h-9"><AlertOctagon className="size-4" /> ADR</TabsTrigger>
-          <TabsTrigger value="discharge" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-500 data-[state=active]:to-emerald-600 data-[state=active]:text-white px-3 h-9"><ArrowRightLeft className="size-4" /> Discharge</TabsTrigger>
-          <TabsTrigger value="handoff" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-600 data-[state=active]:text-white px-3 h-9"><MessageSquarePlus className="size-4" /> Handoff</TabsTrigger>
           <TabsTrigger value="substitute" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500 data-[state=active]:to-orange-600 data-[state=active]:text-white px-3 h-9"><ClipboardList className="size-4" /> Substitute</TabsTrigger>
-          <TabsTrigger value="inhaler" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-sky-500 data-[state=active]:to-blue-600 data-[state=active]:text-white px-3 h-9"><Wind className="size-4" /> Inhaler</TabsTrigger>
           <TabsTrigger value="recall" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-rose-500 data-[state=active]:to-red-600 data-[state=active]:text-white px-3 h-9"><Megaphone className="size-4" /> Recall</TabsTrigger>
         </TabsList>
         <TabsContent value="warfarin" className="mt-4"><WarfarinTab /></TabsContent>
         <TabsContent value="insulin" className="mt-4"><InsulinTab /></TabsContent>
-        <TabsContent value="refill" className="mt-4"><RefillTab /></TabsContent>
         <TabsContent value="adr" className="mt-4"><AdrTab /></TabsContent>
-        <TabsContent value="discharge" className="mt-4"><DischargeTab /></TabsContent>
-        <TabsContent value="handoff" className="mt-4"><HandoffTab /></TabsContent>
         <TabsContent value="substitute" className="mt-4"><SubstitutionTab /></TabsContent>
-        <TabsContent value="inhaler" className="mt-4"><InhalerTab /></TabsContent>
         <TabsContent value="recall" className="mt-4"><RecallTab /></TabsContent>
       </Tabs>
     </div>
@@ -234,82 +221,3 @@ function InsulinTab() {
   )
 }
 
-// ─────────────────────────── Refill ───────────────────────────
-function RefillTab() {
-  const [hn, setHn] = useState('')
-  const [data, setData] = useState<DrugRefillInfo[]>([])
-  const [loading, setLoading] = useState(false)
-
-  async function search() {
-    if (!hn.trim()) return
-    setLoading(true)
-    try {
-      const list = await getPatientRefillHistory(hn.trim())
-      setData(list)
-      if (list.length === 0) toast.info('ไม่พบประวัติยา')
-    } catch (e) {
-      toast.error('ดึงข้อมูลไม่สำเร็จ: ' + (e as Error).message)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => { setData([]) }, [hn])
-
-  return (
-    <Card className="soft-card">
-      <CardHeader>
-        <CardTitle><Calculator className="inline size-5 mr-1.5" />Refill / Compliance Check</CardTitle>
-        <CardDescription>ตรวจ pattern การรับยา (MPR) ของผู้ป่วยจาก DISPENSING_LOG</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex gap-2">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-            <Input value={hn} onChange={(e) => setHn(e.target.value)} placeholder="HN ผู้ป่วย" className="pl-10 h-11" autoFocus onKeyDown={(e) => { if (e.key === 'Enter') search() }} />
-          </div>
-          <Button onClick={search} disabled={!hn.trim() || loading}>
-            {loading ? <Loader2 className="size-4 animate-spin" /> : <Search className="size-4" />}
-            ค้นหา
-          </Button>
-        </div>
-
-        {data.length > 0 && (
-          <div className="space-y-2">
-            <div className="text-sm text-muted-foreground">พบ {data.length} ยาที่เคยรับ — ในช่วง 1 ปีล่าสุด</div>
-            {data.map((d) => (
-              <Card key={d.icode} className={d.status === 'over_supply' ? 'border-orange-300' : d.status === 'under_supply' ? 'border-amber-300' : ''}>
-                <CardContent className="pt-4">
-                  <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <div>
-                      <div className="font-medium">{d.drug_name}</div>
-                      <div className="text-xs text-muted-foreground">{d.icode} · {d.totalDispenses} ครั้ง</div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {d.mpr !== undefined && (
-                        <Badge variant={d.status === 'compliant' ? 'green' : d.status === 'over_supply' ? 'orange' : 'yellow'}>
-                          MPR {(d.mpr * 100).toFixed(0)}%
-                        </Badge>
-                      )}
-                      {d.status === 'over_supply' && <Badge variant="orange">🔁 รับเร็วเกินไป</Badge>}
-                      {d.status === 'under_supply' && <Badge variant="yellow">⏰ ขาดยา</Badge>}
-                      {d.status === 'compliant' && <Badge variant="green">✓ ตรงเวลา</Badge>}
-                    </div>
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    {d.firstDate && <>ครั้งแรก {formatBE(d.firstDate)} · </>}
-                    {d.lastDate && <>ล่าสุด {formatBEDateTime(d.lastDate)}</>}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-            <p className="text-xs text-muted-foreground">
-              <b>MPR (Medication Possession Ratio)</b> = สัดส่วนวันที่ผู้ป่วยมียา ÷ จำนวนวันทั้งหมด<br />
-              สมมุติว่าทุก dispense = supply 30 วัน · 80-120% = ตรงเวลา · &gt;120% = รับซ้ำเร็วเกินไป · &lt;80% = ขาดยา
-            </p>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  )
-}

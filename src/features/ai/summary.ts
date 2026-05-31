@@ -44,11 +44,12 @@ export async function generateAISummary(input: AISummaryInput): Promise<string> 
   ].filter(Boolean).join('\n')
 
   const prompt = `คุณเป็นผู้ช่วยเภสัชกรในโรงพยาบาลรัฐบาลไทย ช่วยสรุปประเด็นการคัดกรองใบสั่งยา
-แสดงเป็น 3 ส่วน เป็นภาษาไทย กระชับ ใช้ bullet points:
+เป็นภาษาไทย **สั้น กระชับมาก** ใช้ bullet points สั้น ๆ (ห้ามยืดเยื้อ) แสดงแค่ 2 ส่วนนี้เท่านั้น:
 
-# 🎯 ประเด็นสำคัญ (2-4 ข้อ)
-# ✅ Action items สำหรับเภสัชกร (3-5 ข้อ — เน้นคำแนะนำผู้ป่วยและ monitor)
-# 📝 บันทึก/ติดตาม
+# 🎯 ประเด็นสำคัญ (2-3 ข้อ สั้น ๆ)
+# ✅ สิ่งที่เภสัชกรควรทำ (2-4 ข้อ — เน้น action ที่ทำได้จริง)
+
+ห้ามมีส่วน "บันทึก/ติดตาม" หรือ checklist ใด ๆ. แต่ละ bullet ไม่เกิน 1 บรรทัด.
 
 ---
 ข้อมูลผู้ป่วย:
@@ -60,11 +61,11 @@ ${drugList || '(ไม่มี)'}
 Alerts จากระบบคัดกรอง:
 ${alertList || '(ไม่มี alert)'}
 ---
-สรุปประเด็นและ action items:`
+สรุปสั้น ๆ:`
 
   const response = await client.messages.create({
     model,
-    max_tokens: 1024,
+    max_tokens: 600,
     messages: [{ role: 'user', content: prompt }],
   })
 

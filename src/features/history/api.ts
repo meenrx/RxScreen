@@ -2,13 +2,24 @@ import { collection, query, where, orderBy, limit as fbLimit, getDocs, addDoc, s
 import { db } from '@/lib/firebase'
 import type { DispensingLog } from '@/types/drug'
 
-function stripUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
-  const out: Partial<T> = {}
-  for (const [k, v] of Object.entries(obj)) {
-    if (v === undefined) continue
-    (out as Record<string, unknown>)[k] = v
+/** ลบค่า undefined แบบ recursive (รวม array + nested object) — Firestore ไม่รับ undefined */
+function deepStripUndefined(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((v) => deepStripUndefined(v))
   }
-  return out
+  if (value && typeof value === 'object' && !(value instanceof Date)) {
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(value)) {
+      if (v === undefined) continue
+      out[k] = deepStripUndefined(v)
+    }
+    return out
+  }
+  return value
+}
+
+function stripUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
+  return deepStripUndefined(obj) as Partial<T>
 }
 
 export async function logDispensing(entry: Omit<DispensingLog, 'id' | 'createdAt'>) {
