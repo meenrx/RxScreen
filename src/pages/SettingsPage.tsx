@@ -26,6 +26,7 @@ function SettingsContent() {
   const [hospitalName, setHospitalName] = useState('โรงพยาบาลรือเสาะ')
   const [hospitalAddress, setHospitalAddress] = useState('')
   const [expensiveThreshold, setExpensiveThreshold] = useState('')
+  const [dupClasses, setDupClasses] = useState('')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -44,6 +45,8 @@ function SettingsContent() {
         if (scrSnap.exists()) {
           const t = scrSnap.data().expensive_unit_price_threshold
           if (typeof t === 'number') setExpensiveThreshold(String(t))
+          const dc = scrSnap.data().duplicate_classes
+          if (Array.isArray(dc)) setDupClasses(dc.join(', '))
         }
       } catch (e) {
         console.error(e)
@@ -60,6 +63,7 @@ function SettingsContent() {
       await saveConfig('screening', {
         // 0 = ปิดการเช็คตามราคา (เช็คเฉพาะบัญชี ง/จ)
         expensive_unit_price_threshold: expensiveThreshold.trim() !== '' && Number.isFinite(thr) && thr > 0 ? thr : 0,
+        duplicate_classes: dupClasses.split(',').map((s) => s.trim()).filter(Boolean),
       })
       toast.success('บันทึกการตั้งค่าเรียบร้อย')
     } catch (e) {
@@ -126,6 +130,24 @@ function SettingsContent() {
             type="number" min={0} value={expensiveThreshold}
             onChange={(e) => setExpensiveThreshold(e.target.value)}
             placeholder="เช่น 50"
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>กลุ่มยาที่ห้ามจ่ายซ้ำ (Duplicate)</CardTitle>
+          <CardDescription>
+            ใส่ชื่อ drug_class ที่ห้ามซ้ำ คั่นด้วย , — ตอนคัดกรองจะเตือน "ยาซ้ำกลุ่ม" เฉพาะกลุ่มเหล่านี้
+            (เว้นว่าง = เตือนทุกกลุ่มเหมือนเดิม). ยาซ้ำ generic จะเตือนเสมอ
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Label>กลุ่มที่ห้ามซ้ำ</Label>
+          <Input
+            value={dupClasses}
+            onChange={(e) => setDupClasses(e.target.value)}
+            placeholder="เช่น NSAIDS, PENICILLINS, PROTON PUMP INHIBITORS"
           />
         </CardContent>
       </Card>

@@ -32,7 +32,8 @@ export function DrugInput({ drugs, onChange, drugMasters = [] }: Props) {
       d.drug_name.toLowerCase().includes(q)
       || d.generic_name?.toLowerCase().includes(q)
       || d.icode.toLowerCase().includes(q)
-      || d.drug_class?.toLowerCase().includes(q),
+      || d.drug_class?.toLowerCase().includes(q)
+      || d.search_keywords?.some((k) => k.toLowerCase().includes(q)),
     )
     filtered.sort((a, b) => {
       const an = a.drug_name.toLowerCase().startsWith(q) ? 0 : 1
@@ -70,7 +71,8 @@ export function DrugInput({ drugs, onChange, drugMasters = [] }: Props) {
         const exact = drugMasters.find((d) =>
           d.drug_name.toLowerCase() === q
           || d.generic_name?.toLowerCase() === q
-          || d.icode.toLowerCase() === q,
+          || d.icode.toLowerCase() === q
+          || d.search_keywords?.some((k) => k.toLowerCase() === q),
         )
         if (exact) selectDrug(exact)
         else toast.error(`ไม่พบยา "${query}" ในระบบ`)

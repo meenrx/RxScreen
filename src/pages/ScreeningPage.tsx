@@ -45,11 +45,12 @@ export default function ScreeningPage() {
   const { drugMasters, labRules, ddiList, diseaseRules, isLoading } = useScreeningData()
   const { data: screeningConfig } = useQuery({ queryKey: ['config-screening'], queryFn: () => getConfig('screening') })
   const expensiveThreshold = screeningConfig?.expensive_unit_price_threshold
+  const noDuplicateClasses = screeningConfig?.duplicate_classes
 
   const alerts = useMemo(() => {
     if (drugs.length === 0) return []
-    return runScreening({ drugs, patient, ddiList, labRules, diseaseRules, drugMasters, expensiveThreshold })
-  }, [drugs, patient, ddiList, labRules, diseaseRules, drugMasters, expensiveThreshold])
+    return runScreening({ drugs, patient, ddiList, labRules, diseaseRules, drugMasters, expensiveThreshold, noDuplicateClasses })
+  }, [drugs, patient, ddiList, labRules, diseaseRules, drugMasters, expensiveThreshold, noDuplicateClasses])
 
   const counts = useMemo(() => ({
     red: alerts.filter((a) => a.severity === 'red').length,
@@ -276,6 +277,18 @@ export default function ScreeningPage() {
             <PdfExportPill patient={patient} drugs={drugs} alerts={alerts} aiSummary={aiText} />
           </div>
         </div>
+      )}
+
+      {/* ปุ่ม Clear ลอย — กดเริ่มใหม่ได้ตลอด */}
+      {(drugs.length > 0 || Object.keys(patient).length > 0) && (
+        <button
+          type="button"
+          onClick={reset}
+          title="ล้างทั้งหมด เริ่มคัดกรองใหม่"
+          className="no-print fixed left-3 bottom-20 md:bottom-4 z-30 inline-flex items-center gap-1.5 h-11 px-4 rounded-full border bg-card/95 backdrop-blur-md shadow-lg text-sm font-medium hover:bg-accent active:scale-95 transition"
+        >
+          <RotateCcw className="size-4" /> เริ่มใหม่
+        </button>
       )}
 
       <QrScannerModal open={qrOpen} onOpenChange={setQrOpen} onScan={onQrScan} />

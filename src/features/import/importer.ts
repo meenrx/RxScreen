@@ -310,6 +310,9 @@ export async function importDrugAccountSheet(
             icode,
             drug_name: drugName || name,
             generic_name: r.generic_name?.trim(),
+            search_keywords: r.search_keywords || r.keywords
+              ? (r.search_keywords || r.keywords).split(/[;,]/).map((s) => s.trim()).filter(Boolean)
+              : undefined,
             strength: r.strength?.trim(),
             pack_unit: r.units?.trim(),
             dosage_form: r.dosageform?.trim(),

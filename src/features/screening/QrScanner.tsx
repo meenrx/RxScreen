@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Scanner, type IDetectedBarcode } from '@yudiel/react-qr-scanner'
-import { ScanLine, X, Type } from 'lucide-react'
+import { ScanLine, X, Type, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
@@ -23,14 +23,33 @@ interface Props {
 export function QrScannerModal({ open, onOpenChange, onScan }: Props) {
   const [manualText, setManualText] = useState('')
   const [error, setError] = useState<string | null>(null)
+  // โหมดสแกนต่อเนื่อง — สแกนหลายสติ๊กเกอร์สะสมเป็นรายการเดียว
+  const [seen, setSeen] = useState<Set<string>>(new Set())
+  const [addedCount, setAddedCount] = useState(0)
+  const [lastAdded, setLastAdded] = useState<string | null>(null)
+
+  // reset ทุกครั้งที่เปิด modal ใหม่
+  useEffect(() => {
+    if (open) { setSeen(new Set()); setAddedCount(0); setLastAdded(null); setError(null) }
+  }, [open])
+
+  /** เพิ่มผลสแกน 1 รายการ (ไม่ปิด modal) — dedupe ด้วย rawValue */
+  function addPayload(raw: string): boolean {
+    if (seen.has(raw)) return false // สแกนซ้ำสติ๊กเกอร์เดิม → ข้าม
+    const data = parseQrPayload(raw)
+    onScan(data)
+    setSeen((p) => new Set(p).add(raw))
+    const n = data.drugs.length
+    setAddedCount((c) => c + n)
+    setLastAdded(data.drugs.map((d) => d.drug_name ?? d.icode).join(', ') || `${n} รายการ`)
+    return true
+  }
 
   function handleScan(codes: IDetectedBarcode[]) {
     if (!codes || codes.length === 0) return
-    const raw = codes[0].rawValue
     try {
-      const data = parseQrPayload(raw)
-      onScan(data)
-      onOpenChange(false)
+      addPayload(codes[0].rawValue)
+      setError(null)
     } catch (e) {
       setError((e as Error).message)
     }
@@ -39,9 +58,7 @@ export function QrScannerModal({ open, onOpenChange, onScan }: Props) {
   function handleManual() {
     if (!manualText.trim()) return
     try {
-      const data = parseQrPayload(manualText.trim())
-      onScan(data)
-      onOpenChange(false)
+      addPayload(manualText.trim())
       setManualText('')
       setError(null)
     } catch (e) {
@@ -74,7 +91,7 @@ export function QrScannerModal({ open, onOpenChange, onScan }: Props) {
               />
               <div className="absolute inset-8 border-4 border-emerald-400/80 rounded-2xl pointer-events-none animate-pulse" />
             </div>
-            <p className="text-xs text-center text-muted-foreground p-3">เล็ง QR ให้อยู่ในกรอบสีเขียว</p>
+            <p className="text-xs text-center text-muted-foreground p-3">เล็ง QR ให้อยู่ในกรอบสีเขียว — สแกนได้หลายสติ๊กเกอร์ต่อเนื่อง</p>
           </TabsContent>
 
           <TabsContent value="manual" className="px-4 pb-4 space-y-2">
@@ -93,10 +110,32 @@ export function QrScannerModal({ open, onOpenChange, onScan }: Props) {
         </Tabs>
 
         {error && (
-          <div className="mx-4 mb-4 p-2 rounded bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-xs flex items-center gap-2">
+          <div className="mx-4 mb-2 p-2 rounded bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-xs flex items-center gap-2">
             <X className="size-3.5" />{error}
           </div>
         )}
+
+        {/* สรุปยาที่สแกนสะสม + ปุ่มเสร็จสิ้น */}
+        <div className="mx-4 mb-4 flex items-center gap-2">
+          <div className="flex-1 min-w-0 text-sm">
+            {addedCount > 0 ? (
+              <span className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300">
+                <CheckCircle2 className="size-4 shrink-0" />
+                เพิ่มแล้ว <b>{addedCount}</b> รายการ
+                {lastAdded && <span className="text-muted-foreground truncate">· ล่าสุด: {lastAdded}</span>}
+              </span>
+            ) : (
+              <span className="text-muted-foreground">ยังไม่ได้สแกน</span>
+            )}
+          </div>
+          <Button
+            variant={addedCount > 0 ? 'default' : 'outline'}
+            onClick={() => onOpenChange(false)}
+            className={addedCount > 0 ? 'bg-gradient-to-r from-emerald-500 to-teal-600' : ''}
+          >
+            {addedCount > 0 ? `เสร็จสิ้น (${addedCount})` : 'ปิด'}
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
   )

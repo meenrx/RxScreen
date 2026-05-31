@@ -235,8 +235,14 @@ export function buildPediatricAlerts(drugs: DrugEntry[], patient: PatientInput):
 }
 
 // ============ DRP — duplicate therapy ============
-export function buildDrpAlerts(drugs: DrugEntry[]): ScreeningAlert[] {
+/**
+ * @param noDupClasses ถ้ากำหนด (non-empty) → เตือนยาซ้ำกลุ่มเฉพาะ class ในลิสต์นี้
+ *   (ตั้งค่าได้ใน Settings — เพราะบางกลุ่มจ่ายซ้ำได้). ถ้าไม่กำหนด → เตือนทุกกลุ่ม (เดิม)
+ */
+export function buildDrpAlerts(drugs: DrugEntry[], noDupClasses?: string[]): ScreeningAlert[] {
   const alerts: ScreeningAlert[] = []
+  const restrict = (noDupClasses ?? []).map((s) => s.trim().toLowerCase()).filter(Boolean)
+  const hasRestrictList = restrict.length > 0
   // duplicate by drug_class
   const byClass = new Map<string, DrugEntry[]>()
   // duplicate by generic_name
@@ -256,6 +262,8 @@ export function buildDrpAlerts(drugs: DrugEntry[]): ScreeningAlert[] {
     }
   }
   for (const [cls, list] of byClass) {
+    // ถ้ามีลิสต์ห้ามซ้ำ → เตือนเฉพาะ class ที่อยู่ในลิสต์
+    if (hasRestrictList && !restrict.some((r) => cls.toLowerCase().includes(r) || r.includes(cls.toLowerCase()))) continue
     if (list.length >= 2) {
       alerts.push({
         id: `drp_dup_${cls}`,
@@ -634,6 +642,8 @@ export interface ScreenContext {
   hadRules?: HadRule[]
   /** เกณฑ์ราคาต่อหน่วยที่ถือว่าแพง (บาท) — undefined/0 = เช็คเฉพาะบัญชียา ง/จ */
   expensiveThreshold?: number
+  /** กลุ่มยาที่ห้ามจ่ายซ้ำ (ตั้งใน Settings) — ว่าง = เตือนทุกกลุ่ม */
+  noDuplicateClasses?: string[]
 }
 
 export function runScreening(ctx: ScreenContext): ScreeningAlert[] {
@@ -647,7 +657,7 @@ export function runScreening(ctx: ScreenContext): ScreeningAlert[] {
     ...buildLactationAlerts(ctx.drugs, ctx.patient),
     ...buildBeersAlerts(ctx.drugs, ctx.patient),
     ...buildRenalAlerts(ctx.drugs, ctx.patient),
-    ...buildDrpAlerts(ctx.drugs),
+    ...buildDrpAlerts(ctx.drugs, ctx.noDuplicateClasses),
     ...buildDupClassAlerts(ctx.drugs),
     ...buildLabAlerts(ctx.drugs, ctx.labRules, ctx.patient),
     ...buildDiseaseAlerts(ctx.drugs, ctx.patient.diseases, ctx.diseaseRules),

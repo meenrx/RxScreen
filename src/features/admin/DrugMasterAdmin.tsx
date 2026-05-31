@@ -352,6 +352,17 @@ export function DrugMasterAdmin() {
                 <div><Label className="mb-1 text-xs">Cross-reactivity (คั่นด้วย ,)</Label><Input list="dl-allergens" className="h-9" value={edit.cross_react?.join(', ') ?? ''} onChange={(e) => setEdit({ ...edit, cross_react: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} placeholder="ตัวอย่าง: Cephalosporin, Carbapenem" /></div>
               </div>
 
+              {/* Row 5.5: คำค้น / ชื่อเรียกอื่น (trade names) */}
+              <div>
+                <Label className="mb-1 text-xs">🔎 คำค้น / ชื่อเรียกอื่น (คั่นด้วย ,)</Label>
+                <Input
+                  className="h-9"
+                  value={edit.search_keywords?.join(', ') ?? ''}
+                  onChange={(e) => setEdit({ ...edit, search_keywords: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })}
+                  placeholder="ตัวอย่าง: Atarax, ยาแก้คัน — พิมพ์คำเหล่านี้แล้วจะเจอยาตัวนี้ตอนคัดกรอง"
+                />
+              </div>
+
               {/* Row 6: Interactions — placeholder บอกรูปแบบที่ควรกรอก */}
               <div className="grid grid-cols-2 gap-2">
                 <div>

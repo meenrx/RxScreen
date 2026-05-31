@@ -37,7 +37,8 @@ export function DrugCombobox({ drugs, value, onChange, placeholder = 'พิม�
       d.drug_name.toLowerCase().includes(q)
       || d.generic_name?.toLowerCase().includes(q)
       || d.icode.toLowerCase().includes(q)
-      || d.drug_class?.toLowerCase().includes(q),
+      || d.drug_class?.toLowerCase().includes(q)
+      || d.search_keywords?.some((k) => k.toLowerCase().includes(q)),
     )
     list.sort((a, b) => {
       const an = a.drug_name.toLowerCase().startsWith(q) ? 0 : 1

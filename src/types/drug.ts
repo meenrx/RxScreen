@@ -16,6 +16,8 @@ export interface DrugMaster {
   is_HAD?: boolean
   /** LASA pairs — รายชื่อ icode หรือชื่อยาที่หน้าตา/ออกเสียงคล้าย */
   lasa_with?: string[]
+  /** คำค้น / ชื่อเรียกอื่น (trade/brand names) เช่น "Atarax" สำหรับ hydroxyzine — ใช้ตอนพิมพ์ค้นหา */
+  search_keywords?: string[]
   /** Pregnancy category (FDA): A, B, C, D, X */
   pregnancy_category?: 'A' | 'B' | 'C' | 'D' | 'X'
   /** Lactation safe? */
@@ -229,6 +231,8 @@ export interface AppConfig {
   hospital_address?: string
   /** เกณฑ์ราคาต่อหน่วย (บาท) ที่ถือว่า "ยาแพง" — ราคาขาย/ทุน ≥ ค่านี้จะแจ้งเตือน (0 = ปิด) */
   expensive_unit_price_threshold?: number
+  /** กลุ่มยา (drug_class) ที่ห้ามจ่ายซ้ำ — ว่าง = เตือนทุกกลุ่ม */
+  duplicate_classes?: string[]
   updatedAt?: Date
 }
 
