@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { useQueryClient } from '@tanstack/react-query'
-import { importFromGoogleSheet, importDrugAccountSheet, dedupeDrugMaster, seedSukhothaiClinical, type ImportProgress, type DrugAccountImportProgress, type DedupeResult, type ClinicalSeedResult } from '@/features/import/importer'
+import { importFromGoogleSheet, importDrugAccountSheet, dedupeDrugMaster, seedSukhothaiClinical, unifyLabParamToCrCl, type ImportProgress, type DrugAccountImportProgress, type DedupeResult, type ClinicalSeedResult, type UnifyLabResult } from '@/features/import/importer'
 import { toast } from 'sonner'
 
 const DEFAULT_SHEET_ID = '1fs5Sjvfui_FL3i4trHG6UIdf2WD0d2dVkGbwgk-H6hM'
@@ -34,6 +34,28 @@ export function ImportSheet() {
   const [clinicalRunning, setClinicalRunning] = useState(false)
   const [clinicalMsg, setClinicalMsg] = useState<string>('')
   const [clinicalResult, setClinicalResult] = useState<ClinicalSeedResult | null>(null)
+
+  // Unify lab param state
+  const [unifyRunning, setUnifyRunning] = useState(false)
+  const [unifyMsg, setUnifyMsg] = useState<string>('')
+  const [unifyResult, setUnifyResult] = useState<UnifyLabResult | null>(null)
+
+  async function handleUnifyLab() {
+    if (!confirm('เปลี่ยน LAB_RULES ที่ param = SCr/Creatinine ให้เป็น CrCl ทั้งหมด\n\n(เพราะ renal dose ใช้ CrCl ที่คำนวณจาก SCr อยู่แล้ว ระบบจะคำนวณอัตโนมัติเมื่อมีค่า SCr+อายุ+น้ำหนัก)\n\nดำเนินการต่อ?')) return
+    setUnifyRunning(true)
+    setUnifyResult(null)
+    setUnifyMsg('')
+    try {
+      const r = await unifyLabParamToCrCl(setUnifyMsg)
+      setUnifyResult(r)
+      toast.success(`อัปเดตเรียบร้อย — แปลง ${r.updated} rule เป็น CrCl`)
+      qc.invalidateQueries({ queryKey: ['lab-rules'] })
+    } catch (e) {
+      toast.error('อัปเดตไม่สำเร็จ: ' + (e as Error).message)
+    } finally {
+      setUnifyRunning(false)
+    }
+  }
 
   async function handleSeedClinical() {
     if (!confirm('นำเข้าข้อมูลคลินิกจากแนวทาง รพ.สุโขทัย + พระจอมเกล้า 2560\n\n• คู่ DDI ~40 คู่ (Warfarin, Ergot, Sildenafil ฯลฯ)\n• HAD 19 ยา (Adrenaline, KCl, RI, ฯลฯ)\n• Renal dose 35 ยา\n• Disease rules (CKD/HF/Pregnancy/Lithium/HLA)\n• Duplicate class (ACEI/ARB/BB/Statin/NSAID)\n• Drug timing (Levothyroxine, Madopar)\n• DUE flag 15 ยา (ATB ควบคุม)\n• SR no-crush 4 ยา (tube feeding)\n\nจะ overwrite ของเดิม — ดำเนินการต่อ?')) return
@@ -304,6 +326,44 @@ export function ImportSheet() {
                 </div>
               )}
             </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ============= Unify LAB param SCr → CrCl ============= */}
+      <Card className="soft-card">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Layers className="size-5 text-sky-600" />
+            ทำให้ LAB param เป็น CrCl ทั้งหมด
+          </CardTitle>
+          <CardDescription>
+            แปลง LAB_RULES ที่ใช้ <code>SCr / Creatinine</code> ให้เป็น <code>CrCl</code> ทุก rule
+            <br />
+            <span className="text-[11px]">⚙ engine จะคำนวณ CrCl อัตโนมัติจาก SCr + อายุ + น้ำหนัก (Cockcroft-Gault) เมื่อ rule ขอ CrCl — ผู้ป่วยกรอกแค่ SCr ก็พอ</span>
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Button
+            onClick={handleUnifyLab}
+            disabled={unifyRunning}
+            size="lg"
+            variant="outline"
+            className="w-full border-sky-300 hover:bg-sky-50 dark:hover:bg-sky-950/30"
+          >
+            {unifyRunning ? <><Loader2 className="size-5 animate-spin" /> กำลังแปลง...</> : <><Layers className="size-5" /> ทำให้ param = CrCl ทั้งหมด</>}
+          </Button>
+
+          {unifyMsg && (
+            <div className="text-xs text-muted-foreground bg-muted/30 rounded-md p-2 font-mono">{unifyMsg}</div>
+          )}
+
+          {unifyResult && (
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="rounded-lg border p-2"><div className="text-[10px] text-muted-foreground">สแกน</div><div className="font-bold">{unifyResult.scanned}</div></div>
+              <div className="rounded-lg border p-2 bg-sky-50 dark:bg-sky-950/30"><div className="text-[10px] text-sky-700 dark:text-sky-400">แปลงเป็น CrCl</div><div className="font-bold text-sky-700 dark:text-sky-400">{unifyResult.updated}</div></div>
+              <div className="rounded-lg border p-2"><div className="text-[10px] text-muted-foreground">ข้าม (ไม่ใช่ SCr)</div><div className="font-bold">{unifyResult.skipped}</div></div>
+            </div>
           )}
         </CardContent>
       </Card>

@@ -573,3 +573,63 @@ export async function seedSukhothaiClinical(
   onProgress?.('เสร็จสิ้น')
   return result
 }
+
+// ============================================================================
+// Unify LAB_RULES param: SCr/Creatinine → CrCl
+// (เพราะทุก rule renal dose ใช้ CrCl ที่คำนวณจาก SCr อยู่แล้ว — ให้แสดงเป็น CrCl ทั้งหมด)
+// ============================================================================
+
+export interface UnifyLabResult {
+  scanned: number
+  updated: number
+  skipped: number
+  errors: string[]
+}
+
+export async function unifyLabParamToCrCl(
+  onProgress?: (msg: string) => void,
+): Promise<UnifyLabResult> {
+  const result: UnifyLabResult = { scanned: 0, updated: 0, skipped: 0, errors: [] }
+  onProgress?.('กำลังโหลด LAB_RULES...')
+  const snap = await getDocs(collection(db, 'LAB_RULES'))
+  result.scanned = snap.size
+
+  const SCR_PARAMS = ['scr', 'creatinine', 'serum creatinine', 'cr', 'serum cr', 's.cr', 's. cr']
+  const toUpdate: { id: string; data: Record<string, unknown> }[] = []
+  for (const docSnap of snap.docs) {
+    const data = docSnap.data() as Record<string, unknown>
+    const param = ((data.param as string | undefined) ?? '').trim().toLowerCase()
+    if (SCR_PARAMS.includes(param)) {
+      toUpdate.push({
+        id: docSnap.id,
+        data: { param: 'CrCl', unit: 'mL/min' },
+      })
+    } else {
+      result.skipped++
+    }
+  }
+
+  if (toUpdate.length === 0) {
+    onProgress?.('ไม่มี rule ที่ต้องอัปเดต')
+    return result
+  }
+
+  onProgress?.(`กำลังอัปเดต ${toUpdate.length} rule (SCr → CrCl)...`)
+  for (let i = 0; i < toUpdate.length; i += BATCH_LIMIT) {
+    const batch = writeBatch(db)
+    const slice = toUpdate.slice(i, i + BATCH_LIMIT)
+    for (const { id, data } of slice) {
+      batch.set(doc(collection(db, 'LAB_RULES'), id), data, { merge: true })
+    }
+    try {
+      await batch.commit()
+      result.updated += slice.length
+      onProgress?.(`อัปเดตแล้ว ${result.updated}/${toUpdate.length}`)
+    } catch (e) {
+      result.errors.push((e as Error).message)
+    }
+  }
+
+  onProgress?.(`เสร็จสิ้น — อัปเดต ${result.updated} rule, ข้าม ${result.skipped} (ไม่ใช่ SCr)`)
+  return result
+}

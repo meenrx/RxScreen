@@ -94,8 +94,15 @@ export function buildLabAlerts(drugs: DrugEntry[], labRules: LabRule[], patient:
 function readPatientLab(p: PatientInput, param?: string): number | undefined {
   if (!param) return undefined
   const k = param.toLowerCase()
+  if (k.includes('crcl') || k.includes('cr cl') || k.includes('cockcroft')) {
+    // คำนวณ CrCl อัตโนมัติจาก SCr + อายุ + น้ำหนัก (Cockcroft-Gault)
+    if (!p.scr || !p.age || !p.weight) return undefined
+    const { crcl } = calcCrCl({ scr: p.scr, age: p.age, weight: p.weight, sex: p.sex ?? 'M' })
+    return crcl
+  }
   if (k.includes('scr') || k.includes('creat')) return p.scr
   if (k === 'inr') return p.inr
+  if (k === 'bun') return undefined // ยังไม่รองรับ — ผู้ใช้กรอกแยก
   return undefined
 }
 
