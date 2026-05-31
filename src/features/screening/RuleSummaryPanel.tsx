@@ -16,28 +16,30 @@ export function RuleSummaryPanel({ patient, drugs, alerts }: Props) {
 
   return (
     <Card className="soft-card border-cyan-200 dark:border-cyan-900">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <span className="size-8 rounded-lg bg-gradient-to-br from-cyan-500 to-sky-600 text-white grid place-items-center">
-            <FileText className="size-4" />
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <span className="size-7 rounded-lg bg-gradient-to-br from-cyan-500 to-sky-600 text-white grid place-items-center">
+            <FileText className="size-3.5" />
           </span>
           สรุปผลคัดกรอง (จากเกณฑ์ที่ตั้งไว้)
         </CardTitle>
-        <CardDescription>{s.headline}</CardDescription>
+        <CardDescription className="text-xs">{s.headline}</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {s.keyPoints.length > 0 && (
-          <Section icon={Target} title="ประเด็นสำคัญ" tone="red" items={s.keyPoints} />
-        )}
-        {s.actions.length > 0 && (
-          <Section icon={CheckSquare} title="Action สำหรับเภสัชกร" tone="emerald" items={s.actions} />
-        )}
-        {s.monitorList.length > 0 && (
-          <Section icon={Eye} title="ค่าที่ต้อง monitor" tone="amber" items={s.monitorList} />
-        )}
-        {s.notes.length > 0 && (
-          <Section icon={AlertCircle} title="หมายเหตุ" tone="slate" items={s.notes} />
-        )}
+      <CardContent className="pt-0">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+          {s.keyPoints.length > 0 && (
+            <Section icon={Target} title="ประเด็นสำคัญ" tone="red" items={s.keyPoints} />
+          )}
+          {s.actions.length > 0 && (
+            <Section icon={CheckSquare} title="Action สำหรับเภสัชกร" tone="emerald" items={s.actions} />
+          )}
+          {s.monitorList.length > 0 && (
+            <Section icon={Eye} title="ค่าที่ต้อง monitor" tone="amber" items={s.monitorList} />
+          )}
+          {s.notes.length > 0 && (
+            <Section icon={AlertCircle} title="หมายเหตุ" tone="slate" items={s.notes} />
+          )}
+        </div>
         {s.keyPoints.length === 0 && s.actions.length === 0 && s.monitorList.length === 0 && (
           <p className="text-sm text-muted-foreground italic">ไม่มีประเด็นสำคัญที่ต้องสรุป</p>
         )}
@@ -54,13 +56,13 @@ function Section({ icon: Icon, title, tone, items }: { icon: React.ComponentType
     slate: 'bg-slate-50 border-slate-200 dark:bg-slate-900 dark:border-slate-700 text-slate-700 dark:text-slate-300',
   }[tone]
   return (
-    <div className={`rounded-xl border p-3 ${toneClass}`}>
-      <div className="flex items-center gap-2 font-semibold mb-2">
-        <Icon className="size-4" />
-        {title} <span className="text-xs opacity-70">({items.length})</span>
+    <div className={`rounded-lg border p-2.5 ${toneClass}`}>
+      <div className="flex items-center gap-1.5 font-semibold mb-1 text-sm">
+        <Icon className="size-3.5" />
+        {title} <span className="text-[10px] opacity-70">({items.length})</span>
       </div>
-      <ul className="space-y-1 text-sm text-foreground">
-        {items.map((x, i) => <li key={i} className="flex gap-2"><span className="opacity-60">•</span><span>{x}</span></li>)}
+      <ul className="space-y-0.5 text-xs text-foreground">
+        {items.map((x, i) => <li key={i} className="flex gap-1.5 leading-snug"><span className="opacity-60 shrink-0">•</span><span>{x}</span></li>)}
       </ul>
     </div>
   )
