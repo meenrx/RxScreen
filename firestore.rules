@@ -114,6 +114,12 @@ service cloud.firestore {
       allow write: if hasAnyRole(['admin', 'pharmacist']);
     }
 
+    // === HAD_RULES — รายละเอียดยา High Alert Drug (max dose / rate / antidote) ===
+    match /HAD_RULES/{docId} {
+      allow read: if isActive();
+      allow write: if hasAnyRole(['admin', 'pharmacist']);
+    }
+
     // === DRUG_CLINICAL_INFO — antidotes / pearls / counseling จาก seed ===
     match /DRUG_CLINICAL_INFO/{docId} {
       allow read: if isActive();
