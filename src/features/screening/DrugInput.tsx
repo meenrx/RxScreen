@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
-import { listLabRulesByIcode } from '@/features/catalog/api'
+import { listLabRulesForDrug } from '@/features/catalog/api'
 import { cn } from '@/lib/utils'
 import type { DrugMaster, LabRule } from '@/types/drug'
 import type { DrugEntry } from '@/types/screening'
@@ -47,7 +47,7 @@ export function DrugInput({ drugs, onChange, drugMasters = [] }: Props) {
   async function selectDrug(master: DrugMaster) {
     setAdding(true)
     try {
-      const labRules: LabRule[] = await listLabRulesByIcode(master.icode).catch(() => [])
+      const labRules: LabRule[] = await listLabRulesForDrug(master).catch(() => [])
       onChange([
         ...drugs,
         { icode: master.icode, drug_name: master.drug_name, master, labRules },

@@ -48,6 +48,31 @@ export async function listLabRulesByIcode(icode: string): Promise<LabRule[]> {
   return snap.docs.map((d) => ({ id: d.id, ...(d.data() as LabRule) }))
 }
 
+/** ดึง lab rules ของยา โดยลอง match หลายคีย์: icode → generic_name (lowercase) → generic_name (เดิม)
+ *  เผื่อกรณี admin เก็บ rule.icode เป็น generic name ไม่ใช่เลข icode จริง */
+export async function listLabRulesForDrug(master: { icode: string; generic_name?: string }): Promise<LabRule[]> {
+  const keys = new Set<string>()
+  if (master.icode) keys.add(master.icode)
+  if (master.generic_name) {
+    const g = master.generic_name.trim()
+    if (g) {
+      keys.add(g)
+      keys.add(g.toLowerCase())
+    }
+  }
+  const results: LabRule[] = []
+  const seen = new Set<string>()
+  for (const k of keys) {
+    const snap = await getDocs(query(collection(db, 'LAB_RULES'), where('icode', '==', k)))
+    for (const d of snap.docs) {
+      if (seen.has(d.id)) continue
+      seen.add(d.id)
+      results.push({ id: d.id, ...(d.data() as LabRule) })
+    }
+  }
+  return results
+}
+
 export async function saveLabRule(rule: LabRule): Promise<string> {
   const id = rule.id ?? `${rule.icode}_${rule.param ?? 'rule'}_${Date.now()}`
   await setDoc(doc(db, 'LAB_RULES', id), { ...rule, updatedAt: serverTimestamp() }, { merge: true })

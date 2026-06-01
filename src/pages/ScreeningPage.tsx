@@ -25,7 +25,7 @@ import { SubstitutionScreenPanel } from '@/features/substitution/SubstitutionScr
 import { useActiveSubstitutions } from '@/features/substitution/hooks'
 import { logDispensing } from '@/features/history/api'
 import { useAuthStore } from '@/features/auth/authStore'
-import { getConfig, getDrugByIcode, listLabRulesByIcode } from '@/features/catalog/api'
+import { getConfig, getDrugByIcode, listLabRulesForDrug } from '@/features/catalog/api'
 import { toast } from 'sonner'
 import type { DrugEntry } from '@/types/screening'
 
@@ -103,7 +103,7 @@ export default function ScreeningPage() {
       const master = drugMasters.find((m) => m.icode.toLowerCase() === d.icode.toLowerCase())
         ?? await getDrugByIcode(d.icode).catch(() => null)
       if (!master) { notFound.push(d.icode); continue }
-      const rules = await listLabRulesByIcode(master.icode).catch(() => [])
+      const rules = await listLabRulesForDrug(master).catch(() => [])
       newDrugs.push({ icode: master.icode, drug_name: master.drug_name, sig: d.sig, master, labRules: rules })
     }
     const cur = useScreeningStore.getState()
