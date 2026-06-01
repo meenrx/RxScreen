@@ -33,11 +33,30 @@ export function DdiAdmin() {
   // อนุญาตให้ใส่ทั้ง icode หรือ generic name (เพราะ DDI ใช้ทั้ง 2 รูปแบบ)
   // ใช้ DrugCombobox สำหรับเลือกจาก master, แต่ยังเก็บค่าเป็นสิ่งที่ผู้ใช้พิมพ์ก็ได้
 
+  // map icode + generic_name → drug_name สำหรับแสดงในตาราง
+  const drugLabel = useMemo(() => {
+    const byIcode = new Map<string, string>()
+    const byGen = new Map<string, string>()
+    for (const d of drugs) {
+      byIcode.set(d.icode, d.drug_name)
+      if (d.generic_name) byGen.set(d.generic_name.toLowerCase(), d.drug_name)
+    }
+    return (key: string): string | null => {
+      if (!key) return null
+      return byIcode.get(key) ?? byGen.get(key.toLowerCase()) ?? null
+    }
+  }, [drugs])
+
   const filtered = useMemo(() => {
     const s = search.toLowerCase()
     if (!s) return data
-    return data.filter((d) => d.drug_a.toLowerCase().includes(s) || d.drug_b.toLowerCase().includes(s))
-  }, [data, search])
+    return data.filter((d) =>
+      d.drug_a.toLowerCase().includes(s)
+      || d.drug_b.toLowerCase().includes(s)
+      || (drugLabel(d.drug_a) ?? '').toLowerCase().includes(s)
+      || (drugLabel(d.drug_b) ?? '').toLowerCase().includes(s),
+    )
+  }, [data, search, drugLabel])
 
   function openNew() {
     setEdit({ drug_a: '', drug_b: '', severity: 'moderate' })
@@ -80,10 +99,31 @@ export function DdiAdmin() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.map((d) => (
+            {filtered.map((d) => {
+              const nameA = drugLabel(d.drug_a)
+              const nameB = drugLabel(d.drug_b)
+              return (
               <TableRow key={d.id}>
-                <TableCell className="font-medium">{d.drug_a}</TableCell>
-                <TableCell className="font-medium">{d.drug_b}</TableCell>
+                <TableCell className="font-medium">
+                  {nameA ? (
+                    <>
+                      <div className="leading-tight">{nameA}</div>
+                      <div className="font-mono text-[10px] text-muted-foreground">{d.drug_a}</div>
+                    </>
+                  ) : (
+                    <span title="ไม่พบใน DRUG_MASTER">{d.drug_a}</span>
+                  )}
+                </TableCell>
+                <TableCell className="font-medium">
+                  {nameB ? (
+                    <>
+                      <div className="leading-tight">{nameB}</div>
+                      <div className="font-mono text-[10px] text-muted-foreground">{d.drug_b}</div>
+                    </>
+                  ) : (
+                    <span title="ไม่พบใน DRUG_MASTER">{d.drug_b}</span>
+                  )}
+                </TableCell>
                 <TableCell>
                   <Badge variant={d.severity === 'contraindicated' || d.severity === 'major' ? 'red' : d.severity === 'moderate' ? 'orange' : 'yellow'}>
                     {SEV_SHORT[d.severity]}
@@ -110,7 +150,8 @@ export function DdiAdmin() {
                   <Button variant="ghost" size="icon" onClick={() => { if (confirm('ลบ DDI นี้?')) del.mutate(d.id!) }}><Trash2 className="size-4 text-red-500" /></Button>
                 </TableCell>
               </TableRow>
-            ))}
+              )
+            })}
           </TableBody>
         </Table>
       </CardContent>
