@@ -238,6 +238,29 @@ export function buildPediatricAlerts(drugs: DrugEntry[], patient: PatientInput):
 }
 
 // ============ DRP — duplicate therapy ============
+/** ตรวจว่ายาเป็นรูปแบบฉีด — ฉีดมักเป็น stat dose ไม่นับซ้ำกับยากิน */
+function isInjection(d: DrugEntry): boolean {
+  const df = (d.master?.dosage_form ?? '').toLowerCase()
+  const form = (d.master?.form ?? '').toLowerCase()
+  const name = (d.master?.drug_name ?? d.drug_name ?? '').toLowerCase()
+  if (/injection|injectable|inj\b|^inj/i.test(df)) return true
+  if (/ฉีด/.test(form)) return true
+  if (/\binj\.?\b|\binjection\b/i.test(name)) return true
+  return false
+}
+
+/** คืน subset ของ list ที่ซ้ำกันจริง (ภายใน route เดียวกัน — กิน+กิน หรือ ฉีด+ฉีด)
+ *  ถ้าเป็นการผสม กิน × ฉีด ของยาเดียวกัน → คืน [] เพราะ ฉีด มักเป็น stat dose */
+function sameRouteDuplicates(list: DrugEntry[]): DrugEntry[] {
+  if (list.length < 2) return []
+  const inj = list.filter(isInjection)
+  const oral = list.filter((d) => !isInjection(d))
+  if (inj.length >= 2 && oral.length >= 2) return list  // ซ้ำทั้ง 2 route → flag ทั้งหมด
+  if (inj.length >= 2) return inj
+  if (oral.length >= 2) return oral
+  return []  // มี 1 ฝั่ง 1 ตัว + อีกฝั่ง 1 ตัว → mixed, skip
+}
+
 /**
  * @param noDupClasses ถ้ากำหนด (non-empty) → เตือนยาซ้ำกลุ่มเฉพาะ class ในลิสต์นี้
  *   (ตั้งค่าได้ใน Settings — เพราะบางกลุ่มจ่ายซ้ำได้). ถ้าไม่กำหนด → เตือนทุกกลุ่ม (เดิม)
@@ -267,26 +290,28 @@ export function buildDrpAlerts(drugs: DrugEntry[], noDupClasses?: string[]): Scr
   for (const [cls, list] of byClass) {
     // ถ้ามีลิสต์ห้ามซ้ำ → เตือนเฉพาะ class ที่อยู่ในลิสต์
     if (hasRestrictList && !restrict.some((r) => cls.toLowerCase().includes(r) || r.includes(cls.toLowerCase()))) continue
-    if (list.length >= 2) {
+    const dup = sameRouteDuplicates(list)
+    if (dup.length >= 2) {
       alerts.push({
         id: `drp_dup_${cls}`,
         type: 'DRP',
         severity: 'orange',
         title: `ยาซ้ำกลุ่ม: ${cls}`,
-        detail: list.map((d) => d.master?.drug_name ?? d.icode).join(', '),
-        drugs: list.map((d) => d.icode),
+        detail: dup.map((d) => d.master?.drug_name ?? d.icode).join(', '),
+        drugs: dup.map((d) => d.icode),
       })
     }
   }
   for (const [gen, list] of byGeneric) {
-    if (list.length >= 2) {
+    const dup = sameRouteDuplicates(list)
+    if (dup.length >= 2) {
       alerts.push({
         id: `drp_gen_${gen}`,
         type: 'DRP',
         severity: 'red',
         title: `ยาซ้ำ generic: ${gen}`,
-        detail: list.map((d) => d.master?.drug_name ?? d.icode).join(', ') + ' — เสี่ยง overdose',
-        drugs: list.map((d) => d.icode),
+        detail: dup.map((d) => d.master?.drug_name ?? d.icode).join(', ') + ' — เสี่ยง overdose',
+        drugs: dup.map((d) => d.icode),
         recommendation: 'เลือก 1 รายการ ตัดอีกรายการออก',
       })
     }
@@ -400,16 +425,17 @@ export function buildDupClassAlerts(drugs: DrugEntry[]): ScreeningAlert[] {
   }
   // Same class >= 2
   for (const [cls, list] of byClass) {
-    if (list.length < 2) continue
     if (cls === 'ACEI' || cls === 'ARB') continue // handled above
+    const dup = sameRouteDuplicates(list)  // ฉีด+กิน same class → skip (stat dose)
+    if (dup.length < 2) continue
     alerts.push({
       id: `dup_${cls}`,
       type: 'DRP',
       severity: 'orange',
-      title: `🚫 Duplicate: ${cls} ${list.length} ตัว`,
-      detail: `${cls}: ${list.map((d) => d.master?.drug_name ?? d.icode).join(', ')} — ห้ามใช้ร่วมกันตามแนวทาง รพ.`,
+      title: `🚫 Duplicate: ${cls} ${dup.length} ตัว`,
+      detail: `${cls}: ${dup.map((d) => d.master?.drug_name ?? d.icode).join(', ')} — ห้ามใช้ร่วมกันตามแนวทาง รพ.`,
       recommendation: 'เลือกใช้ตัวเดียว — consult แพทย์',
-      drugs: list.map((d) => d.icode),
+      drugs: dup.map((d) => d.icode),
     })
   }
   return alerts
