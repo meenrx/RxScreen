@@ -27,6 +27,8 @@ export function JsonImportAdmin() {
     labs?: File | null
     ddi?: File | null
     clinical?: File | null
+    counseling?: File | null
+    had?: File | null
   }>({})
   const [parsed, setParsed] = useState<ParsedSeed | null>(null)
   const [preview, setPreview] = useState<ImportPreview | null>(null)
@@ -43,7 +45,7 @@ export function JsonImportAdmin() {
   })
 
   const fileCount = useMemo(
-    () => [files.drugs, files.labs, files.ddi, files.clinical].filter(Boolean).length,
+    () => [files.drugs, files.labs, files.ddi, files.clinical, files.counseling, files.had].filter(Boolean).length,
     [files],
   )
 
@@ -75,7 +77,9 @@ export function JsonImportAdmin() {
       + `  - Drugs: ${parsed.drugs.length}\n`
       + `  - Lab: ${preview?.labs.matched ?? 0} (skip ${preview?.labs.unmatched.length ?? 0})\n`
       + `  - DDI: ${parsed.ddi.length} คู่\n`
-      + `  - Clinical: ${preview?.clinical.matched ?? 0} (skip ${preview?.clinical.unmatched.length ?? 0})\n\n`
+      + `  - Clinical: ${preview?.clinical.matched ?? 0} (skip ${preview?.clinical.unmatched.length ?? 0})\n`
+      + `  - Counseling: ${preview?.counseling.matched ?? 0} (skip ${preview?.counseling.unmatched.length ?? 0})\n`
+      + `  - HAD: ${parsed.had.length}\n\n`
       + `Backup label: "${label}"\nหากผลไม่ถูกใจกด "ย้อนกลับ" ในตารางด้านล่างได้\n\nดำเนินการต่อ?`,
     )) return
     setRunning(true)
@@ -95,6 +99,8 @@ export function JsonImportAdmin() {
       qc.invalidateQueries({ queryKey: ['drugs'] })
       qc.invalidateQueries({ queryKey: ['lab-rules'] })
       qc.invalidateQueries({ queryKey: ['ddi'] })
+      qc.invalidateQueries({ queryKey: ['counseling'] })
+      qc.invalidateQueries({ queryKey: ['had-rules'] })
     } catch (e) {
       toast.error('Import ล้มเหลว: ' + (e as Error).message)
     } finally {
@@ -113,6 +119,8 @@ export function JsonImportAdmin() {
       qc.invalidateQueries({ queryKey: ['drugs'] })
       qc.invalidateQueries({ queryKey: ['lab-rules'] })
       qc.invalidateQueries({ queryKey: ['ddi'] })
+      qc.invalidateQueries({ queryKey: ['counseling'] })
+      qc.invalidateQueries({ queryKey: ['had-rules'] })
     } catch (e) {
       toast.error('ย้อนกลับล้มเหลว: ' + (e as Error).message)
     } finally {
@@ -149,6 +157,8 @@ export function JsonImportAdmin() {
             <FilePick label="02_lab_monitoring.json" file={files.labs} onPick={(f) => setFiles((s) => ({ ...s, labs: f }))} />
             <FilePick label="03_drug_interactions.json" file={files.ddi} onPick={(f) => setFiles((s) => ({ ...s, ddi: f }))} />
             <FilePick label="04_clinical_info.json" file={files.clinical} onPick={(f) => setFiles((s) => ({ ...s, clinical: f }))} />
+            <FilePick label="counseling_seed.json" file={files.counseling} onPick={(f) => setFiles((s) => ({ ...s, counseling: f }))} />
+            <FilePick label="had_drugs_seed.json" file={files.had} onPick={(f) => setFiles((s) => ({ ...s, had: f }))} />
           </div>
 
           <div className="flex items-center gap-2">
@@ -158,7 +168,7 @@ export function JsonImportAdmin() {
             </Button>
             {parsed && (
               <span className="text-xs text-muted-foreground">
-                ✓ Parse แล้ว — drugs={parsed.drugs.length} labs={parsed.labs.length} ddi={parsed.ddi.length} clinical={parsed.clinical.length}
+                ✓ Parse แล้ว — drugs={parsed.drugs.length} labs={parsed.labs.length} ddi={parsed.ddi.length} clinical={parsed.clinical.length} counseling={parsed.counseling.length} had={parsed.had.length}
               </span>
             )}
           </div>
@@ -170,6 +180,8 @@ export function JsonImportAdmin() {
               <PreviewRow label="Lab monitoring" total={preview.labs.total} matched={preview.labs.matched} unmatched={preview.labs.unmatched} />
               <PreviewRow label="Drug interactions" total={preview.ddi.total} matched={preview.ddi.matched} unmatched={preview.ddi.unmatched} />
               <PreviewRow label="Clinical info" total={preview.clinical.total} matched={preview.clinical.matched} unmatched={preview.clinical.unmatched} />
+              <PreviewRow label="Counseling" total={preview.counseling.total} matched={preview.counseling.matched} unmatched={preview.counseling.unmatched} />
+              <PreviewRow label="HAD rules" total={preview.had.total} matched={preview.had.total} />
             </div>
           )}
 
@@ -202,6 +214,8 @@ export function JsonImportAdmin() {
                 <div>• Labs: <b>{result.labsWritten}</b> (skip {result.labsSkipped})</div>
                 <div>• DDI: <b>{result.ddiWritten}</b> (skip {result.ddiSkipped})</div>
                 <div>• Clinical: <b>{result.clinicalWritten}</b> (skip {result.clinicalSkipped})</div>
+                <div>• Counseling: <b>{result.counselingWritten}</b> (skip {result.counselingSkipped})</div>
+                <div>• HAD: <b>{result.hadWritten}</b></div>
                 <div className="font-mono text-[11px] opacity-70 pt-1">Backup ID: {result.backupId}</div>
               </div>
             </div>
@@ -238,6 +252,8 @@ export function JsonImportAdmin() {
                       <span>labs: {b.summary?.labs ?? 0}</span>
                       <span>ddi: {b.summary?.ddi ?? 0}</span>
                       <span>clinical: {b.summary?.clinical ?? 0}</span>
+                      <span>counseling: {b.summary?.counseling ?? 0}</span>
+                      <span>had: {b.summary?.had ?? 0}</span>
                     </div>
                   </div>
                   <Button

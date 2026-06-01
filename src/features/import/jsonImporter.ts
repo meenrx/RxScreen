@@ -22,7 +22,7 @@ import {
   writeBatch,
 } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import type { DrugMaster, LabRule, DdiOverride } from '@/types/drug'
+import type { DrugMaster, LabRule, DdiOverride, DrugCounseling, HadRule } from '@/types/drug'
 
 // ============ Raw JSON shapes (ตรงกับ seed package) ============
 export interface RawDrug {
@@ -75,12 +75,37 @@ export interface RawClinical {
   priority?: number
 }
 
+export interface RawCounseling {
+  drug_icode?: string
+  drug_key?: string
+  sticker_label?: string
+  counseling_full?: string
+  food_warning?: string
+  special_patients?: string
+  er_symptoms?: string
+  storage?: string
+}
+
+export interface RawHad {
+  drug_key: string
+  display_name?: string
+  max_dose?: string
+  max_rate?: string
+  max_conc?: string
+  dilution?: string
+  route_note?: string
+  full_note?: string
+  antidote?: string
+}
+
 // ============ Parsed seed bundle ============
 export interface ParsedSeed {
   drugs: RawDrug[]
   labs: RawLabMonitoring[]
   ddi: RawDdi[]
   clinical: RawClinical[]
+  counseling: RawCounseling[]
+  had: RawHad[]
   errors: string[]
 }
 
@@ -103,6 +128,8 @@ export async function parseSeedFiles(input: {
   labs?: File | null
   ddi?: File | null
   clinical?: File | null
+  counseling?: File | null
+  had?: File | null
 }): Promise<ParsedSeed> {
   const errors: string[] = []
   async function parse<T>(file: File | null | undefined, name: string): Promise<T[]> {
@@ -117,13 +144,15 @@ export async function parseSeedFiles(input: {
       return []
     }
   }
-  const [drugs, labs, ddi, clinical] = await Promise.all([
+  const [drugs, labs, ddi, clinical, counseling, had] = await Promise.all([
     parse<RawDrug>(input.drugs ?? null, '01_drugs.json'),
     parse<RawLabMonitoring>(input.labs ?? null, '02_lab_monitoring.json'),
     parse<RawDdi>(input.ddi ?? null, '03_drug_interactions.json'),
     parse<RawClinical>(input.clinical ?? null, '04_clinical_info.json'),
+    parse<RawCounseling>(input.counseling ?? null, 'counseling_seed.json'),
+    parse<RawHad>(input.had ?? null, 'had_drugs_seed.json'),
   ])
-  return { drugs, labs, ddi, clinical, errors }
+  return { drugs, labs, ddi, clinical, counseling, had, errors }
 }
 
 // ============ Mapping: JSON → Firestore shape ============
@@ -182,6 +211,42 @@ export function rawLabToFirestore(r: RawLabMonitoring, icode: string): LabRule {
     normal_range: condStr,
     priority: mapLabSeverity(r.alert_severity),
     reason: reasonParts.join(' · ') || undefined,
+  }
+}
+
+/** drop "-" หรือ "" → undefined */
+function cleanStr(v: string | undefined | null): string | undefined {
+  if (!v) return undefined
+  const t = v.trim()
+  if (!t || t === '-' || t === '—') return undefined
+  return t
+}
+
+export function rawCounselingToFirestore(r: RawCounseling, icode: string, drugName?: string): DrugCounseling {
+  return {
+    icode,
+    drug_name: drugName,
+    short_label: cleanStr(r.sticker_label),
+    full_counseling: cleanStr(r.counseling_full),
+    counseling_th: cleanStr(r.counseling_full),
+    food_interaction: cleanStr(r.food_warning),
+    special_pop: cleanStr(r.special_patients),
+    when_to_er: cleanStr(r.er_symptoms),
+    storage: cleanStr(r.storage),
+  }
+}
+
+export function rawHadToFirestore(r: RawHad): HadRule {
+  return {
+    drug_key: r.drug_key,
+    drug_name: r.display_name ?? r.drug_key,
+    max_dose: cleanStr(r.max_dose),
+    max_rate: cleanStr(r.max_rate),
+    max_conc: cleanStr(r.max_conc),
+    dilution: cleanStr(r.dilution),
+    route_note: cleanStr(r.route_note),
+    full_note: cleanStr(r.full_note),
+    antidote: cleanStr(r.antidote),
   }
 }
 
@@ -252,6 +317,8 @@ export interface ImportPreview {
   labs: { total: number; matched: number; unmatched: string[] }
   ddi: { total: number; matched: number; unmatched: string[] }
   clinical: { total: number; matched: number; unmatched: string[] }
+  counseling: { total: number; matched: number; unmatched: string[] }
+  had: { total: number }
 }
 
 export function buildPreview(parsed: ParsedSeed, existingDrugs: DrugMaster[]): ImportPreview {
@@ -261,18 +328,19 @@ export function buildPreview(parsed: ParsedSeed, existingDrugs: DrugMaster[]): I
     ...parsed.drugs.map(rawDrugToFirestore),
   ]
   const resolver = buildResolver(projected)
-  function check(items: { name: string }[]): { matched: number; unmatched: string[] } {
+  const projectedByIcode = new Map(projected.map((d) => [d.icode, d]))
+  function check(items: { name: string }[]): { total: number; matched: number; unmatched: string[] } {
     const unmatched = new Set<string>()
     let matched = 0
     for (const it of items) {
       if (resolveIcode(it.name, resolver)) matched++
       else unmatched.add(it.name)
     }
-    return { matched, unmatched: [...unmatched] }
+    return { total: items.length, matched, unmatched: [...unmatched] }
   }
   return {
     drugs: { total: parsed.drugs.length },
-    labs: check(parsed.labs.map((l) => ({ name: l.generic_name }))) as any,
+    labs: check(parsed.labs.map((l) => ({ name: l.generic_name }))),
     ddi: (() => {
       const names = new Set<string>()
       for (const d of parsed.ddi) {
@@ -287,7 +355,20 @@ export function buildPreview(parsed: ParsedSeed, existingDrugs: DrugMaster[]): I
       }
       return { total: parsed.ddi.length, matched, unmatched }
     })(),
-    clinical: check(parsed.clinical.map((c) => ({ name: c.generic_name }))) as any,
+    clinical: check(parsed.clinical.map((c) => ({ name: c.generic_name }))),
+    counseling: (() => {
+      let matched = 0
+      const unmatched: string[] = []
+      for (const c of parsed.counseling) {
+        // counseling ใช้ drug_icode (มีอยู่จริง) เป็นหลัก, fallback ไป drug_key (generic)
+        const ic = c.drug_icode
+        if (ic && projectedByIcode.has(ic)) { matched++; continue }
+        if (c.drug_key && resolveIcode(c.drug_key, resolver)) { matched++; continue }
+        unmatched.push(c.drug_icode ?? c.drug_key ?? '?')
+      }
+      return { total: parsed.counseling.length, matched, unmatched }
+    })(),
+    had: { total: parsed.had.length },
   }
 }
 
@@ -307,6 +388,8 @@ export interface BackupHeader {
     labs: number
     ddi: number
     clinical: number
+    counseling?: number
+    had?: number
   }
   restoredAt?: Date | null
 }
@@ -355,9 +438,12 @@ export interface ImportResult {
   labsWritten: number
   ddiWritten: number
   clinicalWritten: number
+  counselingWritten: number
+  hadWritten: number
   labsSkipped: number
   ddiSkipped: number
   clinicalSkipped: number
+  counselingSkipped: number
 }
 
 /** Sanitize เพื่อกัน undefined ใน Firestore (Firestore ไม่รับ undefined) */
@@ -453,6 +539,38 @@ export async function runImport(opts: RunImportOptions): Promise<ImportResult> {
     clinicalWrites.map((w) => ({ collection: 'DRUG_CLINICAL_INFO', docId: w.docId })),
   )
 
+  // ===== 5) Counseling — DRUG_COUNSELING (key by icode) =====
+  const projectedByIcode = new Map(dedup.map((d) => [d.icode, d]))
+  const counselingWrites: { docId: string; data: DrugCounseling }[] = []
+  let counselingSkipped = 0
+  for (const c of parsed.counseling) {
+    // ใช้ drug_icode ก่อน, fallback ไป drug_key (generic)
+    let icode: string | null = c.drug_icode && projectedByIcode.has(c.drug_icode) ? c.drug_icode : null
+    if (!icode && c.drug_key) icode = resolveIcode(c.drug_key, resolver)
+    if (!icode) { counselingSkipped++; continue }
+    const drugName = projectedByIcode.get(icode)?.drug_name
+    counselingWrites.push({
+      docId: icode,
+      data: rawCounselingToFirestore(c, icode, drugName),
+    })
+  }
+  log(`กำลัง backup ${counselingWrites.length} counseling docs...`)
+  const counselingSnapshots = await snapshotBefore(
+    counselingWrites.map((w) => ({ collection: 'DRUG_COUNSELING', docId: w.docId })),
+  )
+
+  // ===== 6) HAD rules — HAD_RULES (key by sanitized drug_key) =====
+  const hadWrites: { docId: string; data: HadRule }[] = []
+  for (const r of parsed.had) {
+    const docId = r.drug_key.replace(/[^a-z0-9]/gi, '_').toLowerCase()
+    if (!docId) continue
+    hadWrites.push({ docId, data: rawHadToFirestore(r) })
+  }
+  log(`กำลัง backup ${hadWrites.length} HAD docs...`)
+  const hadSnapshots = await snapshotBefore(
+    hadWrites.map((w) => ({ collection: 'HAD_RULES', docId: w.docId })),
+  )
+
   // ===== เขียน backup header + snapshots =====
   await setDoc(doc(db, BACKUPS_COL, backupId), {
     id: backupId,
@@ -463,11 +581,16 @@ export async function runImport(opts: RunImportOptions): Promise<ImportResult> {
       labs: labSnapshots.length,
       ddi: ddiSnapshots.length,
       clinical: clinicalSnapshots.length,
+      counseling: counselingSnapshots.length,
+      had: hadSnapshots.length,
     },
   })
   log('บันทึก backup header')
 
-  const allSnaps = [...drugSnapshots, ...labSnapshots, ...ddiSnapshots, ...clinicalSnapshots]
+  const allSnaps = [
+    ...drugSnapshots, ...labSnapshots, ...ddiSnapshots,
+    ...clinicalSnapshots, ...counselingSnapshots, ...hadSnapshots,
+  ]
   await writeSnapshotsToBackup(backupId, allSnaps)
   log(`บันทึก backup snapshots ${allSnaps.length} ตัว`)
 
@@ -512,13 +635,35 @@ export async function runImport(opts: RunImportOptions): Promise<ImportResult> {
   }
   log(`✓ DRUG_CLINICAL_INFO ${clinicalWrites.length} rows (skip ${clinicalSkipped})`)
 
+  log('เริ่มเขียน DRUG_COUNSELING...')
+  for (let i = 0; i < counselingWrites.length; i += 400) {
+    const batch = writeBatch(db)
+    for (const w of counselingWrites.slice(i, i + 400)) {
+      batch.set(doc(db, 'DRUG_COUNSELING', w.docId), { ...clean(w.data as any), updatedAt: serverTimestamp() }, { merge: true })
+    }
+    await batch.commit()
+  }
+  log(`✓ DRUG_COUNSELING ${counselingWrites.length} rows (skip ${counselingSkipped})`)
+
+  log('เริ่มเขียน HAD_RULES...')
+  for (let i = 0; i < hadWrites.length; i += 400) {
+    const batch = writeBatch(db)
+    for (const w of hadWrites.slice(i, i + 400)) {
+      batch.set(doc(db, 'HAD_RULES', w.docId), { ...clean(w.data as any), updatedAt: serverTimestamp() }, { merge: true })
+    }
+    await batch.commit()
+  }
+  log(`✓ HAD_RULES ${hadWrites.length} rows`)
+
   return {
     backupId,
     drugsWritten: drugsMapped.length,
     labsWritten: labWrites.length,
     ddiWritten: ddiWrites.length,
     clinicalWritten: clinicalWrites.length,
-    labsSkipped, ddiSkipped, clinicalSkipped,
+    counselingWritten: counselingWrites.length,
+    hadWritten: hadWrites.length,
+    labsSkipped, ddiSkipped, clinicalSkipped, counselingSkipped,
   }
 }
 
