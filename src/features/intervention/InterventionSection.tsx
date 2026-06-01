@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Ban, Repeat, Coins, PiggyBank, Plus } from 'lucide-react'
+import { Ban, Repeat, Coins, PiggyBank, Plus, User } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { useAuthStore } from '@/features/auth/authStore'
+import { useScreeningStore } from '@/features/screening/screeningStore'
 import type { DrugEntry, PatientInput } from '@/types/screening'
 import { useInterventionsByHn, useSaveIntervention } from './hooks'
 
@@ -17,24 +18,48 @@ interface Props {
 export function InterventionSection({ drugs, patient }: Props) {
   const hn = patient.hn?.trim()
   const user = useAuthStore((s) => s.user)
+  const setPatient = useScreeningStore((s) => s.setPatient)
   const { data: existing = [] } = useInterventionsByHn(hn)
   const saveMut = useSaveIntervention()
 
   // ---- บันทึก intervention ใหม่ (off/เปลี่ยนยา) ----
   const [recordDrug, setRecordDrug] = useState<DrugEntry | null>(null)
 
+  // ช่อง HN + ชื่อ — กรอกตรงนี้เลย (ระบบบันทึกประวัติ/intervention ใช้ HN เป็น key)
+  const patientFields = (
+    <div className="flex flex-wrap gap-1.5 items-center rounded-lg border bg-card p-2">
+      <User className="size-4 text-muted-foreground ml-1 shrink-0" />
+      <Input
+        value={patient.hn ?? ''}
+        onChange={(e) => setPatient({ ...patient, hn: e.target.value || undefined })}
+        placeholder="HN *"
+        className="h-9 w-[120px]"
+      />
+      <Input
+        value={patient.patient_name ?? ''}
+        onChange={(e) => setPatient({ ...patient, patient_name: e.target.value || undefined })}
+        placeholder="ชื่อผู้ป่วย"
+        className="h-9 flex-1 min-w-[180px]"
+      />
+    </div>
+  )
+
   if (!hn) {
     return (
-      <p className="text-sm text-muted-foreground italic">
-        กรอก HN ของผู้ป่วยก่อน เพื่อบันทึก intervention และคำนวณมูลค่าประหยัด
-      </p>
+      <div className="space-y-2">
+        {patientFields}
+        <p className="text-xs text-muted-foreground italic">
+          กรอก HN ด้านบนเพื่อบันทึก intervention และคำนวณมูลค่าประหยัด
+        </p>
+      </div>
     )
   }
 
   const totalSaved = existing.reduce((s, i) => s + (i.total_saved ?? 0), 0)
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
+      {patientFields}
       {/* สรุปยอดประหยัดของผู้ป่วยรายนี้ */}
       {existing.length > 0 && (
         <div className="rounded-xl border bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 p-3 flex items-center gap-3">

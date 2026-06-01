@@ -121,10 +121,10 @@ service cloud.firestore {
     }
 
     // === IMPORT_BACKUPS — snapshot ก่อน import เพื่อ rollback ===
+    // ใช้ {document=**} ครอบ subcollection snapshots ด้วย ป้องกัน path match ไม่เจอ
     match /IMPORT_BACKUPS/{backupId} {
-      allow read: if hasAnyRole(['admin', 'pharmacist']);
-      allow write: if hasAnyRole(['admin', 'pharmacist']);
-      match /snapshots/{snapId} {
+      allow read, write: if hasAnyRole(['admin', 'pharmacist']);
+      match /{document=**} {
         allow read, write: if hasAnyRole(['admin', 'pharmacist']);
       }
     }

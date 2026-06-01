@@ -36,8 +36,7 @@ export function SmartPatientForm({ drugs, value, onChange }: Props) {
     ? calcCrCl({ age: value.age, weight: value.weight, height: value.height, sex: value.sex, scr: value.scr }).crcl
     : null
 
-  // แสดงทันทีที่มียา — แม้ไม่มี required clinical field ก็ยังต้องเก็บ HN/ชื่อ
-  if (drugs.length === 0) return null
+  if (drugs.length === 0 || required.length === 0) return null
 
   // ฟิลด์ตัวเลข (อายุ/น้ำหนัก/SCr/INR/...) — บรรทัดเดียว, fixed width กัน Input default w-full
   const numField = (id: FieldId, ph: string, key: keyof PatientInput, step: string = '0.1', widthCls = 'w-[120px]') => isRequired(id) && (
@@ -57,21 +56,9 @@ export function SmartPatientForm({ drugs, value, onChange }: Props) {
   return (
     <Card className="soft-card">
       <CardContent className="pt-3 pb-3 space-y-2">
-        {/* แถวเดียว: HN + ชื่อ + input ตัวเลข + select เพศ + yes/no ทุกข้อ */}
+        {/* แถวเดียว: input ตัวเลข + select เพศ + yes/no ทุกข้อ
+            HN + ชื่อผู้ป่วย → กรอกใน Intervention panel (ใช้แค่ตอนบันทึก) */}
         <div className="flex flex-wrap gap-1.5 items-center">
-          <Input
-            value={value.hn ?? ''}
-            onChange={(e) => set('hn', e.target.value || undefined)}
-            placeholder="HN"
-            className="h-10 w-[110px]"
-            title="HN (จำเป็นสำหรับบันทึก intervention)"
-          />
-          <Input
-            value={value.patient_name ?? ''}
-            onChange={(e) => set('patient_name', e.target.value || undefined)}
-            placeholder="ชื่อผู้ป่วย"
-            className="h-10 w-[180px]"
-          />
           {numField('age', 'อายุ (ปี)', 'age', '1', 'w-[90px]')}
           {isRequired('sex') && (
             <Select value={value.sex ?? ''} onValueChange={(v) => set('sex', v as 'M' | 'F')}>
