@@ -114,6 +114,21 @@ service cloud.firestore {
       allow write: if hasAnyRole(['admin', 'pharmacist']);
     }
 
+    // === DRUG_CLINICAL_INFO — antidotes / pearls / counseling จาก seed ===
+    match /DRUG_CLINICAL_INFO/{docId} {
+      allow read: if isActive();
+      allow write: if hasAnyRole(['admin', 'pharmacist']);
+    }
+
+    // === IMPORT_BACKUPS — snapshot ก่อน import เพื่อ rollback ===
+    match /IMPORT_BACKUPS/{backupId} {
+      allow read: if hasAnyRole(['admin', 'pharmacist']);
+      allow write: if hasAnyRole(['admin', 'pharmacist']);
+      match /snapshots/{snapId} {
+        allow read, write: if hasAnyRole(['admin', 'pharmacist']);
+      }
+    }
+
     // === INTERVENTION — บันทึก off/เปลี่ยนยา + มูลค่าประหยัดสะสม ===
     match /INTERVENTION/{docId} {
       allow read: if isActive();

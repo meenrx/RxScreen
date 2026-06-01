@@ -7,6 +7,7 @@ import { CounselingAdmin } from '@/features/admin/CounselingAdmin'
 import { DiseaseAdmin } from '@/features/admin/DiseaseAdmin'
 import { UsersAdmin } from '@/features/admin/UsersAdmin'
 import { ImportSheet } from '@/features/admin/ImportSheet'
+import { JsonImportAdmin } from '@/features/admin/JsonImportAdmin'
 import { HadRuleAdmin } from '@/features/admin/HadRuleAdmin'
 
 export default function AdminPage() {
@@ -20,6 +21,7 @@ export default function AdminPage() {
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="overflow-x-auto max-w-full">
           <TabsTrigger value="import">📥 นำเข้า Sheet</TabsTrigger>
+          <TabsTrigger value="import-json">📦 Import JSON + Rollback</TabsTrigger>
           <TabsTrigger value="drugs">ยา (DRUG_MASTER)</TabsTrigger>
           <TabsTrigger value="lab">Lab/Dose</TabsTrigger>
           <TabsTrigger value="ddi">DDI</TabsTrigger>
@@ -29,6 +31,7 @@ export default function AdminPage() {
           <TabsTrigger value="users">ผู้ใช้</TabsTrigger>
         </TabsList>
         <TabsContent value="import"><ImportSheet /></TabsContent>
+        <TabsContent value="import-json"><JsonImportAdmin /></TabsContent>
         <TabsContent value="drugs"><DrugMasterAdmin /></TabsContent>
         <TabsContent value="lab"><LabRuleAdmin /></TabsContent>
         <TabsContent value="ddi"><DdiAdmin /></TabsContent>
