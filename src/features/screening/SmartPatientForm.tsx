@@ -36,10 +36,11 @@ export function SmartPatientForm({ drugs, value, onChange }: Props) {
     ? calcCrCl({ age: value.age, weight: value.weight, height: value.height, sex: value.sex, scr: value.scr }).crcl
     : null
 
-  if (drugs.length === 0 || required.length === 0) return null
+  // แสดงทันทีที่มียา — แม้ไม่มี required clinical field ก็ยังต้องเก็บ HN/ชื่อ
+  if (drugs.length === 0) return null
 
-  // ฟิลด์ตัวเลข (อายุ/น้ำหนัก/SCr/INR/...) — บรรทัดเดียว
-  const numField = (id: FieldId, ph: string, key: keyof PatientInput, step: string = '0.1') => isRequired(id) && (
+  // ฟิลด์ตัวเลข (อายุ/น้ำหนัก/SCr/INR/...) — บรรทัดเดียว, fixed width กัน Input default w-full
+  const numField = (id: FieldId, ph: string, key: keyof PatientInput, step: string = '0.1', widthCls = 'w-[120px]') => isRequired(id) && (
     <Input
       key={id}
       type="number"
@@ -48,7 +49,7 @@ export function SmartPatientForm({ drugs, value, onChange }: Props) {
       value={(value[key] as number | undefined) ?? ''}
       onChange={(e) => set(key, (e.target.value ? +e.target.value : undefined) as PatientInput[typeof key])}
       placeholder={ph + (isMissing(id) ? ' *' : '')}
-      className={cn('h-10', isMissing(id) && 'required-input')}
+      className={cn('h-10', widthCls, isMissing(id) && 'required-input')}
       title={required.find((r) => r.id === id)?.reasons.join(' · ')}
     />
   )
@@ -56,12 +57,25 @@ export function SmartPatientForm({ drugs, value, onChange }: Props) {
   return (
     <Card className="soft-card">
       <CardContent className="pt-3 pb-3 space-y-2">
-        {/* แถวเดียว: input ตัวเลข + select เพศ + yes/no ทุกข้อ */}
+        {/* แถวเดียว: HN + ชื่อ + input ตัวเลข + select เพศ + yes/no ทุกข้อ */}
         <div className="flex flex-wrap gap-1.5 items-center">
-          {numField('age', 'อายุ (ปี)', 'age', '1')}
+          <Input
+            value={value.hn ?? ''}
+            onChange={(e) => set('hn', e.target.value || undefined)}
+            placeholder="HN"
+            className="h-10 w-[110px]"
+            title="HN (จำเป็นสำหรับบันทึก intervention)"
+          />
+          <Input
+            value={value.patient_name ?? ''}
+            onChange={(e) => set('patient_name', e.target.value || undefined)}
+            placeholder="ชื่อผู้ป่วย"
+            className="h-10 w-[180px]"
+          />
+          {numField('age', 'อายุ (ปี)', 'age', '1', 'w-[90px]')}
           {isRequired('sex') && (
             <Select value={value.sex ?? ''} onValueChange={(v) => set('sex', v as 'M' | 'F')}>
-              <SelectTrigger className={cn('h-10 w-[90px]', isMissing('sex') && 'required-input')}>
+              <SelectTrigger className={cn('h-10 w-[85px]', isMissing('sex') && 'required-input')}>
                 <SelectValue placeholder={'เพศ' + (isMissing('sex') ? ' *' : '')} />
               </SelectTrigger>
               <SelectContent>
@@ -70,11 +84,11 @@ export function SmartPatientForm({ drugs, value, onChange }: Props) {
               </SelectContent>
             </Select>
           )}
-          {numField('weight', 'น้ำหนัก (kg)', 'weight')}
-          {numField('height', 'ส่วนสูง (cm)', 'height')}
-          {numField('scr', 'SCr (mg/dL)', 'scr', '0.01')}
-          {numField('egfr', 'eGFR', 'egfr', '1')}
-          {numField('inr', 'INR', 'inr')}
+          {numField('weight', 'น้ำหนัก (kg)', 'weight', '0.1', 'w-[110px]')}
+          {numField('height', 'ส่วนสูง (cm)', 'height', '0.1', 'w-[110px]')}
+          {numField('scr', 'SCr (mg/dL)', 'scr', '0.01', 'w-[110px]')}
+          {numField('egfr', 'eGFR', 'egfr', '1', 'w-[90px]')}
+          {numField('inr', 'INR', 'inr', '0.1', 'w-[80px]')}
 
           {isRequired('is_pregnant') && <YesNoChip emoji="🤰" label="ตั้งครรภ์" value={value.is_pregnant} missing={isMissing('is_pregnant')} onChange={(v) => set('is_pregnant', v)} />}
           {isRequired('is_lactating') && <YesNoChip emoji="🤱" label="ให้นม" value={value.is_lactating} missing={isMissing('is_lactating')} onChange={(v) => set('is_lactating', v)} />}
