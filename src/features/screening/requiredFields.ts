@@ -42,6 +42,32 @@ function isSyrupForm(d: DrugEntry): boolean {
   return false
 }
 
+/** รูปแบบยาทาภายนอก / ไม่ดูดซึมเข้ากระแสเลือดเป็นหลัก —
+ *  ยาหยอดตา (OPH), ยาหยอดหู (OTI/EAR), ยาสูดพ่น (INH/NEB), ยาทา (cream/oint/gel),
+ *  ยาเหน็บ (SUPP), ยาพ่นจมูก (NASAL) ฯลฯ
+ *  ยาเหล่านี้ไม่ต้องคำนวณ mg/kg, ไม่ต้องเช็ค renal/IBW/Beers — เว้นแต่ admin set
+ *  rule ใน LAB_RULES ตรง ๆ */
+const TOPICAL_KEYS_TH = ['ตา', 'หู', 'จมูก', 'พ่น', 'ทา', 'เหน็บ']
+const TOPICAL_KEYS_EN = [
+  'oph', 'eye', 'ear', 'oti', 'otic',
+  'inh', 'inhaler', 'inhalation', 'neb', 'nebul',
+  'nasal', 'nas',
+  'top', 'topical', 'cream', 'ointment', 'oint', 'lotion', 'gel', 'spray',
+  'patch', 'plaster',
+  'supp', 'suppository', 'vag', 'vaginal',
+]
+
+function isTopicalOrExternal(d: DrugEntry): boolean {
+  const form = (d.master?.form ?? '').toLowerCase()
+  const dosage = (d.master?.dosage_form ?? '').toLowerCase()
+  const name = ((d.master?.drug_name ?? d.drug_name) ?? '').toLowerCase()
+  if (TOPICAL_KEYS_TH.some((k) => form.includes(k) || name.includes(k))) return true
+  if (TOPICAL_KEYS_EN.some((k) => dosage.includes(k) || form.includes(k))) return true
+  // ชื่อยา pattern: "...-OPH", " OPH", "EYE", "EAR", "INH", "(ตา)" ฯลฯ
+  if (/-?\boph\b|\beye\b|\bear\b|\binh\b|\bneb\b|\btop\b|\bnasal\b|\bsupp\b|\bvag\b/i.test(name)) return true
+  return false
+}
+
 export interface RequiredField {
   id: FieldId
   label: string
@@ -82,6 +108,22 @@ export function computeRequiredFields(drugs: DrugEntry[]): RequiredField[] {
     // Cat D/X pregnancy and G6PD are kept because they apply regardless of
     // dosage form.
     const syrup = isSyrupForm(d)
+    // Topical / external (OPH, EAR, INH, cream, supp, ...) — ดูดซึมเข้ากระแสต่ำ
+    // ข้ามทุก auto-trigger ที่ตั้งอยู่บน master field (renal/IBW/Beers/preg-C/
+    // smoking/alcohol/G6PD/syrup-weight). ใช้เฉพาะ rule ที่ admin set ใน LAB_RULES
+    // ตรง ๆ เท่านั้น — ถ้าไม่ตั้งค่า ไม่ต้องถาม
+    const topical = isTopicalOrExternal(d)
+    if (topical) {
+      // เฉพาะ LAB_RULES param-based เท่านั้น (ข้อ 8 ด้านล่าง)
+      for (const r of d.labRules ?? []) {
+        if (!r.param) continue
+        const id = paramToFieldId(r.param)
+        if (id) {
+          add(id, `${r.param}${r.normal_range ? ` (ปกติ ${r.normal_range})` : ''}`, r.unit, `${name} → ต้อง monitor ${r.param}`, mapPriority(r.priority))
+        }
+      }
+      continue
+    }
 
     // 1) มี dose_meta → ปรับ dose ตามไต
     //    - rule ที่ใช้ CrCl → ขอ age+weight+sex+scr (คำนวณ Cockcroft-Gault)
