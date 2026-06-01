@@ -9,7 +9,6 @@ import { SmartPatientForm } from '@/features/screening/SmartPatientForm'
 import { DrugInput } from '@/features/screening/DrugInput'
 import { GroupedAlertList } from '@/features/screening/GroupedAlertList'
 import { AISummaryPanel } from '@/features/screening/AISummaryPanel'
-import { RuleSummaryPanel } from '@/features/screening/RuleSummaryPanel'
 import { AllergyRiskPanel } from '@/features/screening/AllergyRiskPanel'
 import { Sticker57Panel } from '@/features/screening/Sticker57'
 import { CounselingChecklist } from '@/features/screening/CounselingChecklist'
@@ -150,7 +149,7 @@ export default function ScreeningPage() {
   const hasResults = drugs.length > 0
 
   return (
-    <div className="space-y-4 max-w-6xl mx-auto pb-24 md:pb-4">
+    <div className="space-y-4 max-w-6xl xl:max-w-[88rem] mx-auto pb-24 md:pb-4">
       {/* Compact header */}
       <header className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2.5">
@@ -211,23 +210,10 @@ export default function ScreeningPage() {
                 {isLoading && <span className="text-xs text-muted-foreground">โหลด...</span>}
               </div>
 
-              <RuleSummaryPanel patient={patient} drugs={drugs} alerts={alerts} />
-
-              {/* รวมสารกระตุ้นแพ้ + ระวังแพ้ข้าม (ไม่ match กับประวัติคนไข้ — แสดงเป็น info) */}
+              {/* รายละเอียดผลคัดกรอง — แสดงเลย ไม่มีสรุปซ้ำซ้อน */}
               <AllergyRiskPanel drugs={drugs} />
-
-              {/* รูปก่อน/หลัง ของยาที่เปลี่ยนบริษัท */}
               <SubstitutionScreenPanel drugs={drugs} />
-
-              <CollapsibleSection
-                title="รายละเอียดผลคัดกรองทุกหมวด"
-                subtitle={`${alerts.length} alerts แยกตามหมวด`}
-                icon={<div className="size-8 rounded-lg bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 grid place-items-center"><ListChecks className="size-4" /></div>}
-                defaultOpen={alerts.length > 0 && alerts.length <= 5}
-                badge={alerts.length > 0 ? <Badge variant="outline" className="ml-1">{alerts.length}</Badge> : null}
-              >
-                <GroupedAlertList alerts={alerts} />
-              </CollapsibleSection>
+              <GroupedAlertList alerts={alerts} />
 
               {/* ส่วนรอง — จัด 2 คอลัมน์บนจอกว้าง ใช้พื้นที่คุ้ม (มือถือเรียงเดี่ยว) */}
               <div className="grid lg:grid-cols-2 gap-3 items-start">

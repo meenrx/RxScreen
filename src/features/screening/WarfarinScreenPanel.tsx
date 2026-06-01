@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Pill } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { listInrProtocol, listTwdTable, adjustWarfarin } from '@/features/tools/warfarinAdjuster'
+import { cn } from '@/lib/utils'
 import type { DrugEntry } from '@/types/screening'
 
 interface Props {
@@ -53,112 +53,97 @@ export function WarfarinScreenPanel({ drugs, inr }: Props) {
   const isLoading = pLoading || tLoading
   const noProtocol = !isLoading && protocol.length === 0
 
+  const actionLabel =
+    result?.action === 'increase' ? `เพิ่ม ${result.adjustPct}%` :
+    result?.action === 'decrease' ? `ลด ${result.adjustPct}%` :
+    result?.action === 'maintain' ? 'คงเดิม' :
+    result?.action === 'hold_1d' ? 'หยุด 1 วัน + ลด 10%' :
+    result?.action === 'omit_vitk' ? 'งด + Vit K' : null
+
+  const actionTone =
+    result?.action === 'increase' ? 'alert-orange' :
+    result?.action === 'decrease' ? 'alert-yellow' :
+    result?.action === 'hold_1d' || result?.action === 'omit_vitk' ? 'alert-red' :
+    'alert-green'
+
   return (
     <Card className="soft-card border-violet-200 dark:border-violet-900">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <span className="size-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 text-white grid place-items-center"><Pill className="size-4" /></span>
-          Warfarin Adjustment
-        </CardTitle>
-        <CardDescription>
-          ตรวจพบ Warfarin ในรายการยา — กรอก <b>TWD ปัจจุบัน</b> เพื่อให้ระบบใช้ protocol รพ. คำนวณขนาดใหม่
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="pt-3 pb-3 space-y-2">
         {noProtocol && (
-          <div className="rounded-xl border bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900 p-3 text-sm">
-            ⚠ ยังไม่มี Warfarin protocol ในระบบ — กรุณา Import จาก Google Sheet ใน Admin
+          <div className="rounded-md border bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900 px-2.5 py-1.5 text-xs">
+            ⚠ ยังไม่มี Warfarin protocol — Import จาก Admin ก่อน
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div>
-            <Label className="mb-1.5">INR (จากด้านบน)</Label>
-            <Input
-              value={inr ?? ''}
-              readOnly
-              className="h-12 text-xl text-center font-bold bg-muted"
-              placeholder="กรอก INR ที่ฟอร์มด้านบน"
-            />
-          </div>
-          <div>
-            <Label className="mb-1.5">TWD ปัจจุบัน (mg/week) <span className="text-red-500">*</span></Label>
-            <Input
-              type="number"
-              step="0.5"
-              inputMode="decimal"
-              value={twd}
-              onChange={(e) => setTwd(e.target.value ? +e.target.value : '')}
-              className="h-12 text-xl text-center font-bold"
-              placeholder="เช่น 21"
-            />
-          </div>
-          <div>
-            <Label className="mb-1.5">ขนาดเม็ดยา</Label>
-            <Select value={String(strength)} onValueChange={(v) => setStrength(+v)}>
-              <SelectTrigger className="w-full h-12 text-lg"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="3">3 mg</SelectItem>
-                <SelectItem value="5">5 mg</SelectItem>
-              </SelectContent>
-            </Select>
-            {detectedStrength && <div className="text-xs text-muted-foreground mt-1">ตรวจพบจากรายการยา: {detectedStrength} mg</div>}
-          </div>
+        {/* แถวเดียว: icon + INR + TWD + strength + ผลลัพธ์ */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="inline-flex items-center gap-1.5 h-10 px-2.5 rounded-md bg-gradient-to-br from-violet-500 to-purple-600 text-white text-sm font-semibold">
+            <Pill className="size-4" /> Warfarin
+          </span>
+          <Input
+            value={inr ?? ''}
+            readOnly
+            className="h-10 w-[110px] text-center font-bold bg-muted"
+            placeholder="INR (ด้านบน)"
+            title="INR"
+          />
+          <Input
+            type="number"
+            step="0.5"
+            inputMode="decimal"
+            value={twd}
+            onChange={(e) => setTwd(e.target.value ? +e.target.value : '')}
+            className="h-10 w-[120px] text-center font-bold"
+            placeholder="TWD mg/wk *"
+            title="TWD ปัจจุบัน (mg/week)"
+          />
+          <Select value={String(strength)} onValueChange={(v) => setStrength(+v)}>
+            <SelectTrigger className="h-10 w-[90px]" title={detectedStrength ? `ตรวจพบจากใบสั่ง: ${detectedStrength} mg` : 'ขนาดเม็ดยา'}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="3">3 mg</SelectItem>
+              <SelectItem value="5">5 mg</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {inr === undefined && twd !== '' && (
+            <span className="text-xs text-amber-700 dark:text-amber-300 italic">⚠ กรอก INR ก่อน</span>
+          )}
+
+          {result && (
+            <>
+              <span className="text-muted-foreground text-sm">→</span>
+              <span
+                className={cn('inline-flex items-center gap-1.5 h-10 px-3 rounded-md border font-bold text-sm', actionTone)}
+                title={result.rule?.note ?? 'INR ในเป้าหมาย'}
+              >
+                {actionLabel}
+                {result.vitK && <span className="text-xs font-medium">· 💉 {result.vitK}</span>}
+              </span>
+              <span className="inline-flex items-center gap-1 h-10 px-2.5 rounded-md border bg-card text-sm">
+                <span className="text-[10px] text-muted-foreground">TWD ใหม่</span>
+                <span className="font-bold">{result.newTwd}</span>
+                <span className="text-[10px] text-muted-foreground">mg/wk</span>
+              </span>
+              {result.schedule && (
+                <span className="inline-flex items-center gap-1 h-10 px-2.5 rounded-md border bg-card text-sm" title={result.schedule.description}>
+                  <span className="text-[10px] text-muted-foreground">sched</span>
+                  <span className="font-mono font-bold">{result.schedule.schedule_code}</span>
+                </span>
+              )}
+            </>
+          )}
         </div>
 
-        {inr === undefined && twd !== '' && (
-          <div className="text-sm text-amber-700 dark:text-amber-300 italic">⚠ กรอก INR ที่ฟอร์มด้านบนก่อน เพื่อคำนวณ</div>
-        )}
-
-        {result && (
-          <div className="space-y-3 fade-up pt-2 border-t">
-            <div className={
-              'rounded-xl border p-4 ' +
-              (result.action === 'increase' ? 'alert-orange'
-                : result.action === 'decrease' ? 'alert-yellow'
-                : result.action === 'hold_1d' || result.action === 'omit_vitk' ? 'alert-red'
-                : 'alert-green')
-            }>
-              <div className="text-xs uppercase tracking-wider opacity-70">{result.rule?.note ?? 'INR ในเป้าหมาย'}</div>
-              <div className="text-2xl md:text-3xl font-bold mt-1">
-                {result.action === 'increase' && `เพิ่ม ${result.adjustPct}%`}
-                {result.action === 'decrease' && `ลด ${result.adjustPct}%`}
-                {result.action === 'maintain' && 'คงขนาดเดิม'}
-                {result.action === 'hold_1d' && 'หยุด 1 วัน + ลด 10%'}
-                {result.action === 'omit_vitk' && `งด + Vit K`}
-              </div>
-              {result.vitK && <div className="text-sm font-semibold mt-1">💉 {result.vitK}</div>}
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="rounded-xl border p-3 bg-card">
-                <div className="text-xs text-muted-foreground">TWD ใหม่</div>
-                <div className="text-2xl font-bold">{result.newTwd} <span className="text-sm font-normal">mg/week</span></div>
-                <div className="text-xs text-muted-foreground mt-1">จากเดิม {twd} mg/week</div>
-              </div>
-              <div className="rounded-xl border p-3 bg-card">
-                <div className="text-xs text-muted-foreground">Schedule แนะนำ</div>
-                {result.schedule ? (
-                  <>
-                    <div className="text-base font-bold font-mono">{result.schedule.schedule_code}</div>
-                    <div className="text-xs">{result.schedule.description}</div>
-                  </>
-                ) : <div className="text-sm text-muted-foreground italic">ไม่พบ schedule</div>}
-              </div>
-            </div>
-
-            {result.closestSchedules.length > 1 && (
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">ตัวเลือกใกล้เคียง</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {result.closestSchedules.map((s, i) => (
-                    <Badge key={i} variant={i === 0 ? 'default' : 'outline'} className="font-mono text-xs">
-                      {s.twd_mg}mg · {s.schedule_code}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            )}
+        {result && result.closestSchedules.length > 1 && (
+          <div className="flex flex-wrap items-center gap-1 text-xs">
+            <span className="text-muted-foreground">ใกล้เคียง:</span>
+            {result.closestSchedules.map((s, i) => (
+              <Badge key={i} variant={i === 0 ? 'default' : 'outline'} className="font-mono text-[10px]">
+                {s.twd_mg}·{s.schedule_code}
+              </Badge>
+            ))}
           </div>
         )}
       </CardContent>
