@@ -175,15 +175,18 @@ export function buildRenalAlerts(drugs: DrugEntry[], patient: PatientInput): Scr
     const { gfr, label } = resolved
     const action = findMatchingDoseAction(rule.dose_meta, gfr)
     if (!action) continue
+    const isHardStop = /hold|avoid|contraindicat|ห้ามใช้|งด/i.test(action)
     const sev: ScreeningAlert['severity'] =
-      /hold|avoid|contraindicat/i.test(action) ? 'red' :
-      /reduce|adjust|q24|q48/i.test(action) ? 'orange' : 'yellow'
+      isHardStop ? 'red' :
+      /reduce|adjust|q24|q48|ลด|ปรับ/i.test(action) ? 'orange' : 'yellow'
+    const drugName = drug.master?.drug_name ?? drug.icode
+    const icon = isHardStop ? '🚫' : '⚠️'
     alerts.push({
       id: `renal_${drug.icode}`,
       type: 'RENAL',
       severity: sev,
-      title: `⚠️ ${label} = ${gfr} mL/min → ปรับ ${drug.master?.drug_name ?? drug.icode}`,
-      detail: `แนะนำ: ${action}`,
+      title: `${icon} ${drugName}: ${action} (${label}=${gfr})`,
+      detail: `${label} = ${gfr} mL/min — เกณฑ์: ${rule.dose_meta}`,
       drugs: [drug.icode],
       source: rule,
       recommendation: action,

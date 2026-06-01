@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react'
-import { Plus, Pencil, Trash2, Search } from 'lucide-react'
+import { useState, useMemo, useEffect } from 'react'
+import { Plus, Pencil, Trash2, Search, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -13,6 +13,164 @@ import { DrugCombobox } from '@/components/DrugCombobox'
 import { HelpHint } from '@/components/HelpHint'
 import { useLabRules, useSaveLabRule, useDelete, useDrugs } from '@/features/catalog/hooks'
 import type { LabRule } from '@/types/drug'
+
+// ===== dose_meta parser/serializer สำหรับ DoseMetaBuilder =====
+type DoseOp = '<' | '<=' | '>' | '>=' | '=' | 'range'
+interface DoseRow { op: DoseOp; v1: string; v2: string; action: string }
+
+function parseDoseMetaRows(s: string): DoseRow[] {
+  if (!s) return []
+  return s
+    .split(/[;\n]/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line): DoseRow | null => {
+      const [condRaw, ...rest] = line.split(':')
+      if (!condRaw || rest.length === 0) return null
+      const action = rest.join(':').trim()
+      // strip prefix
+      const c = condRaw.replace(/^(?:CrCl|Cr\s*Cl|eGFR|GFR)\s*/i, '').trim()
+      const range = c.match(/^(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)$/)
+      if (range) return { op: 'range', v1: range[1], v2: range[2], action }
+      const op = c.match(/^(<=|>=|<|>|=)\s*(\d+(?:\.\d+)?)$/)
+      if (op) return { op: op[1] as DoseOp, v1: op[2], v2: '', action }
+      return null
+    })
+    .filter((r): r is DoseRow => r !== null)
+}
+
+function serializeDoseRows(rows: DoseRow[]): string {
+  return rows
+    .filter((r) => r.action.trim() && r.v1.trim())
+    .map((r) => {
+      const cond = r.op === 'range' ? `${r.v1}-${r.v2}` : `${r.op}${r.v1}`
+      return `${cond}:${r.action.trim()}`
+    })
+    .join('; ')
+}
+
+const OP_LABELS: Record<DoseOp, string> = {
+  '<': 'น้อยกว่า',
+  '<=': '≤ (น้อยกว่าหรือเท่ากับ)',
+  '>': 'มากกว่า',
+  '>=': '≥ (มากกว่าหรือเท่ากับ)',
+  '=': 'เท่ากับ',
+  range: 'อยู่ในช่วง',
+}
+
+interface BuilderProps {
+  value: string | undefined
+  onChange: (v: string) => void
+  basisLabel: string
+}
+
+function DoseMetaBuilder({ value, onChange, basisLabel }: BuilderProps) {
+  const [rows, setRows] = useState<DoseRow[]>(() => parseDoseMetaRows(value ?? ''))
+  const [advanced, setAdvanced] = useState(false)
+  const [raw, setRaw] = useState<string>(value ?? '')
+  const unparsable = (value ?? '').trim().length > 0 && rows.length === 0 && !advanced
+
+  // ถ้า value ภายนอกเปลี่ยน (เปิด rule ใหม่) → resync
+  useEffect(() => {
+    setRows(parseDoseMetaRows(value ?? ''))
+    setRaw(value ?? '')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value])
+
+  function commit(next: DoseRow[]) {
+    setRows(next)
+    const s = serializeDoseRows(next)
+    setRaw(s)
+    onChange(s)
+  }
+  function addRow() { commit([...rows, { op: '<', v1: '', v2: '', action: '' }]) }
+  function updateRow(i: number, patch: Partial<DoseRow>) {
+    commit(rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)))
+  }
+  function removeRow(i: number) { commit(rows.filter((_, idx) => idx !== i)) }
+
+  return (
+    <div className="space-y-2">
+      {unparsable && (
+        <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 px-2.5 py-1.5 text-xs">
+          ⚠ ข้อความปัจจุบัน parse ไม่ออก: <code className="font-mono">{value}</code> — ลองสร้างใหม่ด้วยปุ่ม "+ เพิ่มเงื่อนไข" ด้านล่าง หรือกด "ขั้นสูง" เพื่อแก้ raw text
+        </div>
+      )}
+
+      {!advanced && (
+        <>
+          {rows.length === 0 && (
+            <p className="text-xs text-muted-foreground italic">ยังไม่มีเงื่อนไข — กด "+ เพิ่มเงื่อนไข" เพื่อเริ่ม</p>
+          )}
+          {rows.map((r, i) => (
+            <div key={i} className="flex items-center gap-1.5 flex-wrap bg-card border rounded-md p-1.5">
+              <span className="text-xs text-muted-foreground shrink-0">ถ้า {basisLabel}</span>
+              <Select value={r.op} onValueChange={(v) => updateRow(i, { op: v as DoseOp })}>
+                <SelectTrigger className="h-8 w-[180px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(OP_LABELS) as DoseOp[]).map((op) => (
+                    <SelectItem key={op} value={op}>{OP_LABELS[op]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Input
+                value={r.v1}
+                onChange={(e) => updateRow(i, { v1: e.target.value })}
+                placeholder="ค่า"
+                className="h-8 w-[80px]"
+                inputMode="decimal"
+              />
+              {r.op === 'range' && (
+                <>
+                  <span className="text-xs">–</span>
+                  <Input
+                    value={r.v2}
+                    onChange={(e) => updateRow(i, { v2: e.target.value })}
+                    placeholder="ถึง"
+                    className="h-8 w-[80px]"
+                    inputMode="decimal"
+                  />
+                </>
+              )}
+              <span className="text-muted-foreground">→</span>
+              <Input
+                value={r.action}
+                onChange={(e) => updateRow(i, { action: e.target.value })}
+                placeholder="เช่น ห้ามใช้, ลด 50%, 1g q24h"
+                className="h-8 flex-1 min-w-[160px]"
+              />
+              <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => removeRow(i)} aria-label="ลบเงื่อนไข">
+                <X className="size-4 text-red-500" />
+              </Button>
+            </div>
+          ))}
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="outline" size="sm" className="h-8" onClick={addRow}>
+              <Plus className="size-3.5" /> เพิ่มเงื่อนไข
+            </Button>
+            <button type="button" className="text-xs text-muted-foreground underline" onClick={() => setAdvanced(true)}>
+              ขั้นสูง (raw text)
+            </button>
+          </div>
+        </>
+      )}
+
+      {advanced && (
+        <>
+          <Textarea
+            value={raw}
+            onChange={(e) => { setRaw(e.target.value); onChange(e.target.value); setRows(parseDoseMetaRows(e.target.value)) }}
+            placeholder="eGFR<30:ห้ามใช้; eGFR 30-60:ลด 50%"
+            rows={2}
+          />
+          <button type="button" className="text-xs text-muted-foreground underline" onClick={() => setAdvanced(false)}>
+            ← กลับไปแบบเลือก dropdown
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
 
 export function LabRuleAdmin() {
   const { data = [] } = useLabRules()
@@ -181,21 +339,14 @@ export function LabRuleAdmin() {
               <div className="rounded-xl border p-3 space-y-2 bg-muted/20">
                 <div className="text-sm font-semibold flex items-center gap-2">
                   🫘 ปรับขนาดตามไต (Renal)
-                  <HelpHint title="dose_meta — Renal adjustment">
-                    คั่นด้วย <code>;</code> หรือขึ้นบรรทัดใหม่<br /><br />
-                    <b>ตัวอย่าง:</b><br />
-                    <code className="block bg-muted p-1 rounded my-1 text-[11px]">CrCl&lt;10:hold; CrCl 10-50:1g q24h; CrCl&gt;50:1g q12h</code>
-                    <b>Operators:</b> &lt;, &lt;=, &gt;, &gt;=, a-b (ช่วง)<br />
-                    ระบบจะคำนวณ CrCl อัตโนมัติจากผู้ป่วย (Cockcroft-Gault) แล้วเลือก rule ที่ตรง
+                  <HelpHint title="ปรับขนาดตามไต">
+                    เลือก operator จาก dropdown แล้วกรอกค่า + action เช่น "ห้ามใช้", "ลด 50%", "1g q24h"<br />
+                    หลายเงื่อนไขได้ ระบบจะเลือกข้อที่ตรงเป็นข้อแรก<br /><br />
+                    <b>คำที่ trigger สีแดง:</b> hold, avoid, ห้ามใช้, งด<br />
+                    <b>คำที่ trigger สีส้ม:</b> reduce, ลด, ปรับ, q24, q48
                   </HelpHint>
                 </div>
-                <Textarea
-                  value={edit.dose_meta ?? ''}
-                  onChange={(e) => setEdit({ ...edit, dose_meta: e.target.value })}
-                  placeholder="CrCl<10:hold; CrCl 10-50:1g q24h; CrCl>50:1g q12h"
-                  rows={2}
-                />
-                <div className="flex items-center gap-2 text-xs pt-1">
+                <div className="flex items-center gap-2 text-xs">
                   <span className="text-muted-foreground">ฐานค่าไต:</span>
                   {(['crcl', 'egfr'] as const).map((b) => {
                     const activeBasis = (edit.renal_basis ?? 'crcl') === b
@@ -211,6 +362,11 @@ export function LabRuleAdmin() {
                     )
                   })}
                 </div>
+                <DoseMetaBuilder
+                  value={edit.dose_meta}
+                  onChange={(v) => setEdit({ ...edit, dose_meta: v })}
+                  basisLabel={(edit.renal_basis ?? 'crcl') === 'egfr' ? 'eGFR' : 'CrCl'}
+                />
               </div>
 
               {/* Pediatric / dose limits */}

@@ -71,6 +71,12 @@ export function calcCrCl(input: RenalInput): RenalResult {
 export interface DoseRule {
   condition: string         // raw
   matches: (crcl: number) => boolean
+  /** ระยะห่างจาก "ขอบ" ของเงื่อนไขถึงค่าผู้ป่วย — ยิ่งน้อย = เงื่อนไขยิ่ง specific
+   *   <X / <=X  → distance = X - val   (val อยู่ใต้เพดาน X เท่าไร)
+   *   >X / >=X  → distance = val - X   (val สูงกว่าพื้น X เท่าไร)
+   *   range a-b → distance = min(val-a, b-val)
+   *   =X        → distance = 0  */
+  distance: (crcl: number) => number
   action: string            // เช่น "1g q24h", "hold"
 }
 
@@ -93,33 +99,41 @@ export function parseDoseMeta(meta: string | undefined): DoseRule[] {
       if (!cond || rest.length === 0) return null
       const action = rest.join(':').trim()
       const condition = cond.trim()
-      const matches = buildMatcher(condition)
-      if (!matches) return null
-      return { condition, matches, action }
+      const built = buildMatcher(condition)
+      if (!built) return null
+      return { condition, matches: built.matches, distance: built.distance, action }
     })
     .filter((r): r is DoseRule => r !== null)
 }
 
-function buildMatcher(cond: string): ((crcl: number) => boolean) | null {
-  // strip optional "CrCl" prefix
-  const c = cond.replace(/^CrCl\s*/i, '').trim()
+interface BuiltMatcher {
+  matches: (crcl: number) => boolean
+  distance: (crcl: number) => number
+}
+
+function buildMatcher(cond: string): BuiltMatcher | null {
+  // strip optional renal-function prefix (CrCl / eGFR / GFR / Cr Cl)
+  const c = cond.replace(/^(?:CrCl|Cr\s*Cl|eGFR|GFR)\s*/i, '').trim()
   // range like "10-50"
   const range = c.match(/^(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)$/)
   if (range) {
     const lo = parseFloat(range[1])
     const hi = parseFloat(range[2])
-    return (crcl) => crcl >= lo && crcl <= hi
+    return {
+      matches: (v) => v >= lo && v <= hi,
+      distance: (v) => Math.min(v - lo, hi - v),
+    }
   }
   // operators
   const op = c.match(/^(<=|>=|<|>|=)\s*(\d+(?:\.\d+)?)$/)
   if (op) {
     const value = parseFloat(op[2])
     switch (op[1]) {
-      case '<': return (crcl) => crcl < value
-      case '<=': return (crcl) => crcl <= value
-      case '>': return (crcl) => crcl > value
-      case '>=': return (crcl) => crcl >= value
-      case '=': return (crcl) => crcl === value
+      case '<': return { matches: (v) => v < value, distance: (v) => value - v }
+      case '<=': return { matches: (v) => v <= value, distance: (v) => value - v }
+      case '>': return { matches: (v) => v > value, distance: (v) => v - value }
+      case '>=': return { matches: (v) => v >= value, distance: (v) => v - value }
+      case '=': return { matches: (v) => v === value, distance: () => 0 }
     }
   }
   return null
@@ -127,7 +141,11 @@ function buildMatcher(cond: string): ((crcl: number) => boolean) | null {
 
 export function findMatchingDoseAction(meta: string | undefined, crcl: number): string | null {
   const rules = parseDoseMeta(meta)
-  const matched = rules.find((r) => r.matches(crcl))
+  // เลือกเงื่อนไขที่ตรงและ "specific ที่สุด" — ขอบใกล้ค่าผู้ป่วยที่สุด
+  // เช่น eGFR=50 + กฎ {>=30, >=45} → เลือก >=45 (distance=5) แทน >=30 (distance=20)
+  const matched = rules
+    .filter((r) => r.matches(crcl))
+    .sort((a, b) => a.distance(crcl) - b.distance(crcl))[0]
   return matched ? matched.action : null
 }
 
