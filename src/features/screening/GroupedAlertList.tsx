@@ -73,6 +73,9 @@ export function GroupedAlertList({ alerts }: { alerts: ScreeningAlert[] }) {
 
 function AlertItem({ alert: a }: { alert: ScreeningAlert }) {
   const Icon = iconBySeverity[a.severity]
+  // เน้น recommendation ของ RENAL / DDI / HAD / ALLERGY / PED เป็นพิเศษ —
+  // เป็น "ขนาด/action ที่ระบบคิดให้ตรงเคสนี้" ต้องให้เภสัชกรเห็นเด่นๆ
+  const emphasizeRec = a.recommendation && ['RENAL', 'DDI', 'HAD', 'ALLERGY', 'PED', 'G6PD', 'PREG', 'LACT'].includes(a.type)
   return (
     <div className={cn('rounded-xl border p-3 transition-all', `alert-${a.severity}`)}>
       <div className="flex items-start gap-3">
@@ -88,7 +91,28 @@ function AlertItem({ alert: a }: { alert: ScreeningAlert }) {
           <div className="font-semibold text-sm">{a.title}</div>
           <div className="text-xs mt-1 whitespace-pre-wrap leading-relaxed">{a.detail}</div>
           {a.recommendation && (
-            <div className="text-xs mt-2 font-medium rounded-md bg-white/60 dark:bg-slate-800/60 px-2 py-1 inline-block">💡 {a.recommendation}</div>
+            emphasizeRec ? (
+              <div className={cn(
+                'mt-2 rounded-lg border-2 px-3 py-2 shadow-sm',
+                a.severity === 'red' && 'bg-white dark:bg-slate-900 border-red-400 dark:border-red-700',
+                a.severity === 'orange' && 'bg-white dark:bg-slate-900 border-orange-400 dark:border-orange-700',
+                a.severity === 'yellow' && 'bg-white dark:bg-slate-900 border-yellow-400 dark:border-yellow-700',
+                a.severity === 'blue' && 'bg-white dark:bg-slate-900 border-sky-400 dark:border-sky-700',
+              )}>
+                <div className="text-[10px] uppercase tracking-wider opacity-60 font-semibold flex items-center gap-1">
+                  💡 ขนาด/Action ที่แนะนำ
+                </div>
+                <div className={cn(
+                  'text-base font-bold mt-0.5 leading-tight',
+                  a.severity === 'red' && 'text-red-700 dark:text-red-300',
+                  a.severity === 'orange' && 'text-orange-700 dark:text-orange-300',
+                  a.severity === 'yellow' && 'text-yellow-800 dark:text-yellow-200',
+                  a.severity === 'blue' && 'text-sky-700 dark:text-sky-300',
+                )}>{a.recommendation}</div>
+              </div>
+            ) : (
+              <div className="text-xs mt-2 font-medium rounded-md bg-white/60 dark:bg-slate-800/60 px-2 py-1 inline-block">💡 {a.recommendation}</div>
+            )
           )}
         </div>
       </div>

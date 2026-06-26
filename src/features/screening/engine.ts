@@ -68,11 +68,22 @@ export function buildLabAlerts(drugs: DrugEntry[], labRules: LabRule[], patient:
   for (const drug of drugs) {
     const rules = labRules.filter((r) => r.icode === drug.icode)
     for (const r of rules) {
+      // ข้าม rule ที่เป็น "renal dose adjustment" — จะไป trigger RENAL alert แยก
+      // ไม่งั้นเด้ง LAB monitor ซ้ำซ้อนกับ RENAL ที่บอก action แล้ว
+      if (r.dose_meta) continue
+
       const sev: ScreeningAlert['severity'] = r.priority === 'high' ? 'red' : r.priority === 'medium' ? 'orange' : 'yellow'
       const paramValue = readPatientLab(patient, r.param)
       const inRange = isInNormalRange(paramValue, r.normal_range)
       const outOfRange = paramValue !== undefined && inRange === false
-      if (paramValue === undefined && r.priority !== 'high') continue
+
+      // เกณฑ์แสดง alert:
+      //   - ค่าผิดปกติ (outOfRange) → แสดงเสมอ (สีแดง)
+      //   - ค่ายังไม่ได้กรอก + priority สูง → แสดง (เตือนให้กรอก)
+      //   - อื่น ๆ (ปกติ / ไม่มีเกณฑ์เทียบ / missing แต่ priority ไม่สูง) → ข้าม
+      const isMissingHighPrio = paramValue === undefined && r.priority === 'high'
+      if (!outOfRange && !isMissingHighPrio) continue
+
       alerts.push({
         id: `lab_${drug.icode}_${r.param}_${r.id ?? ''}`,
         type: 'LAB',
@@ -81,7 +92,7 @@ export function buildLabAlerts(drugs: DrugEntry[], labRules: LabRule[], patient:
         detail: [
           r.normal_range ? `ค่าปกติ: ${r.normal_range} ${r.unit ?? ''}` : null,
           r.reason ? `เหตุผล: ${r.reason}` : null,
-          outOfRange ? '⚠ ค่าผิดปกติ' : (paramValue === undefined ? 'ยังไม่ได้ใส่ค่า' : 'อยู่ในเกณฑ์ปกติ'),
+          outOfRange ? '⚠ ค่าผิดปกติ' : 'ยังไม่ได้ใส่ค่า',
         ].filter(Boolean).join(' · '),
         drugs: [drug.icode],
         source: r,
@@ -147,6 +158,21 @@ function labelSeverity(s: DiseaseRule['severity']) {
 }
 
 // ============ Renal ============
+/** แปลง dose_meta string ("eGFR>50:75%; eGFR 40-59:150mg OD") → อ่านง่ายขึ้น
+ *  ("eGFR>50 → 75% · eGFR 40-59 → 150mg OD") ใช้กับ detail ของ alert เท่านั้น */
+function formatDoseMetaForDisplay(meta: string): string {
+  return meta
+    .split(/[;\n]/)
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((p) => {
+      const i = p.indexOf(':')
+      if (i < 0) return p
+      return `${p.slice(0, i).trim()} → ${p.slice(i + 1).trim()}`
+    })
+    .join(' · ')
+}
+
 /** หา GFR ที่ใช้ได้: ยา basis=egfr → ใช้ค่าที่กรอกตรง, basis=crcl → คำนวณ Cockcroft-Gault */
 function resolveGfr(
   rule: { renal_basis?: 'crcl' | 'egfr'; dose_meta?: string; param?: string },
@@ -186,7 +212,7 @@ export function buildRenalAlerts(drugs: DrugEntry[], patient: PatientInput): Scr
       type: 'RENAL',
       severity: sev,
       title: `${icon} ${drugName}: ${action} (${label}=${gfr})`,
-      detail: `${label} = ${gfr} mL/min — เกณฑ์: ${rule.dose_meta}`,
+      detail: `${label} = ${gfr} mL/min — เกณฑ์: ${formatDoseMetaForDisplay(rule.dose_meta)}`,
       drugs: [drug.icode],
       source: rule,
       recommendation: action,
