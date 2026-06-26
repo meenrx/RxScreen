@@ -33,6 +33,7 @@ const labelByType: Record<ScreeningAlert['type'], string> = {
   NO_CRUSH: 'ห้ามบด',
   COST: 'ยาแพง',
   SUBST: 'เปลี่ยนบริษัท',
+  RDU: 'RDU',
 }
 
 export function AlertList({ alerts }: { alerts: ScreeningAlert[] }) {

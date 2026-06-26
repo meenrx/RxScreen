@@ -24,6 +24,9 @@ export interface PatientInput {
   diseases?: string[]
   /** allergy → drug name, class, หรือ allergen เช่น "Penicillin", "Sulfa" */
   allergies?: string[]
+  /** RDU context flags ที่เภสัชกร tick ว่าผู้ป่วยมา OPD ด้วยอาการ/diagnosis อะไร
+   *  เพื่อให้ระบบเช็คเกณฑ์ RDU MOPH เช่น 'URI' / 'DIARRHEA' / 'NORMAL_LABOR' / 'TRAUMA' */
+  rdu_context?: string[]
 }
 
 export interface DrugEntry {
@@ -40,7 +43,7 @@ export type AlertType =
   | 'DDI' | 'LAB' | 'DISEASE' | 'DRP' | 'RENAL' | 'PED'
   | 'ALLERGY' | 'HAD' | 'LASA' | 'PREG' | 'LACT' | 'BEERS' | 'G6PD'
   | 'FOOD' | 'SMOKING' | 'ALCOHOL' | 'TDM'
-  | 'TIMING' | 'DUE' | 'NO_CRUSH' | 'COST' | 'SUBST'
+  | 'TIMING' | 'DUE' | 'NO_CRUSH' | 'COST' | 'SUBST' | 'RDU'
 
 export interface ScreeningAlert {
   id: string

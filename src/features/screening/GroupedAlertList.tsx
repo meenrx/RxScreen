@@ -26,6 +26,7 @@ const CATEGORIES: { type: AlertType; label: string; emoji: string }[] = [
   { type: 'SMOKING', label: 'สูบบุหรี่', emoji: '🚬' },
   { type: 'ALCOHOL', label: 'แอลกอฮอล์', emoji: '🍺' },
   { type: 'TDM', label: 'TDM (ระดับยาในเลือด)', emoji: '🧪' },
+  { type: 'RDU', label: 'RDU (Rational Drug Use)', emoji: '📋' },
 ]
 
 export function GroupedAlertList({ alerts }: { alerts: ScreeningAlert[] }) {

@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { calcCrCl } from '@/features/renal/calc'
 import { computeRequiredFields, isFieldFilled, type FieldId } from './requiredFields'
+import { getActiveRduTriggers, RDU_CONTEXT_OPTIONS, type RduContextKey } from './rduRules'
 import { cn } from '@/lib/utils'
 import type { DrugEntry, PatientInput } from '@/types/screening'
 
@@ -36,7 +37,15 @@ export function SmartPatientForm({ drugs, value, onChange }: Props) {
     ? calcCrCl({ age: value.age, weight: value.weight, height: value.height, sex: value.sex, scr: value.scr }).crcl
     : null
 
-  if (drugs.length === 0 || required.length === 0) return null
+  const rduTriggers = useMemo(() => getActiveRduTriggers(drugs), [drugs])
+
+  function toggleRduContext(key: RduContextKey) {
+    const cur = value.rdu_context ?? []
+    const next = cur.includes(key) ? cur.filter((x) => x !== key) : [...cur, key]
+    set('rdu_context', next)
+  }
+
+  if (drugs.length === 0 || (required.length === 0 && !rduTriggers.needsContext)) return null
 
   // ฟิลด์ตัวเลข (อายุ/น้ำหนัก/SCr/INR/...) — บรรทัดเดียว, fixed width กัน Input default w-full
   const numField = (id: FieldId, ph: string, key: keyof PatientInput, step: string = '0.1', widthCls = 'w-[120px]') => isRequired(id) && (
@@ -96,6 +105,31 @@ export function SmartPatientForm({ drugs, value, onChange }: Props) {
             </span>
           )}
         </div>
+
+        {/* RDU context — โผล่เมื่อมียา ATB ในใบสั่ง ให้ติ๊กว่ามาด้วยอาการอะไร */}
+        {rduTriggers.needsContext && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs text-amber-700 dark:text-amber-300 font-medium">📋 RDU:</span>
+            {RDU_CONTEXT_OPTIONS.map((opt) => {
+              const active = value.rdu_context?.includes(opt.key)
+              return (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={() => toggleRduContext(opt.key)}
+                  title={opt.hint}
+                  className={cn(
+                    'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs border transition',
+                    active ? 'bg-amber-500 text-white border-amber-500 font-medium' : 'border-input hover:bg-accent',
+                  )}
+                >
+                  <span>{opt.emoji}</span>
+                  {active && '✓ '}{opt.label}
+                </button>
+              )
+            })}
+          </div>
+        )}
 
         {/* โรคประจำตัว — บรรทัดเดียวแบบ chips */}
         {isRequired('diseases') && (
