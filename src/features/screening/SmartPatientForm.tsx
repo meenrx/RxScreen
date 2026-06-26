@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -45,22 +45,29 @@ export function SmartPatientForm({ drugs, value, onChange }: Props) {
     set('rdu_context', next)
   }
 
+  // เปิด/ปิดแถวอธิบาย "ทำไมต้องกรอก field นี้" (diagnostic — ใช้หา rule ที่ trigger เกินจำเป็น)
+  const [showReasons, setShowReasons] = useState(false)
+
   if (drugs.length === 0 || (required.length === 0 && !rduTriggers.needsContext)) return null
 
   // ฟิลด์ตัวเลข (อายุ/น้ำหนัก/SCr/INR/...) — บรรทัดเดียว, fixed width กัน Input default w-full
-  const numField = (id: FieldId, ph: string, key: keyof PatientInput, step: string = '0.1', widthCls = 'w-[120px]') => isRequired(id) && (
-    <Input
-      key={id}
-      type="number"
-      inputMode="decimal"
-      step={step}
-      value={(value[key] as number | undefined) ?? ''}
-      onChange={(e) => set(key, (e.target.value ? +e.target.value : undefined) as PatientInput[typeof key])}
-      placeholder={ph + (isMissing(id) ? ' *' : '')}
-      className={cn('h-10', widthCls, isMissing(id) && 'required-input')}
-      title={required.find((r) => r.id === id)?.reasons.join(' · ')}
-    />
-  )
+  const numField = (id: FieldId, ph: string, key: keyof PatientInput, step: string = '0.1', widthCls = 'w-[120px]') => {
+    if (!isRequired(id)) return null
+    const reasons = required.find((r) => r.id === id)?.reasons.join('\n• ') ?? ''
+    return (
+      <Input
+        key={id}
+        type="number"
+        inputMode="decimal"
+        step={step}
+        value={(value[key] as number | undefined) ?? ''}
+        onChange={(e) => set(key, (e.target.value ? +e.target.value : undefined) as PatientInput[typeof key])}
+        placeholder={ph + (isMissing(id) ? ' *' : '')}
+        className={cn('h-10', widthCls, isMissing(id) && 'required-input')}
+        title={`ขอเพราะ:\n• ${reasons}`}
+      />
+    )
+  }
 
   return (
     <Card className="soft-card">
@@ -105,6 +112,29 @@ export function SmartPatientForm({ drugs, value, onChange }: Props) {
             </span>
           )}
         </div>
+
+        {/* "ทำไมต้องกรอก?" — เปิดดู rule ที่ trigger field แต่ละตัว (diagnostic) */}
+        {required.length > 0 && (
+          <div className="text-[11px]">
+            <button
+              type="button"
+              onClick={() => setShowReasons((v) => !v)}
+              className="text-muted-foreground hover:text-foreground underline underline-offset-2"
+            >
+              {showReasons ? '▼ ซ่อนเหตุผล' : '▶ ทำไมต้องกรอก?'} ({required.length} ฟิลด์)
+            </button>
+            {showReasons && (
+              <ul className="mt-1 space-y-0.5 rounded-md border bg-muted/30 p-2 max-h-40 overflow-y-auto">
+                {required.map((r) => (
+                  <li key={r.id} className="flex gap-1.5">
+                    <span className="font-semibold w-[120px] shrink-0">{r.label}{r.unit ? ` (${r.unit})` : ''}</span>
+                    <span className="text-muted-foreground">{r.reasons.join(' · ')}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
 
         {/* RDU context — โผล่เมื่อมียา ATB ในใบสั่ง ให้ติ๊กว่ามาด้วยอาการอะไร */}
         {rduTriggers.needsContext && (
