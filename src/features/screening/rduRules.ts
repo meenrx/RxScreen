@@ -94,26 +94,43 @@ interface RduCheck {
   triggerMatch: (d: DrugEntry) => boolean
   /** ตรวจเงื่อนไข — return:
    *   'inappropriate' = match แน่นอน (alert orange/red)
-   *   'remind' = trigger present แต่ต้อง confirm context (alert blue info)
    *   'ok' = ไม่ต้องเตือน */
-  evaluate: (triggerDrugs: DrugEntry[], patient: PatientInput) => 'inappropriate' | 'remind' | 'ok'
+  evaluate: (triggerDrugs: DrugEntry[], patient: PatientInput) => 'inappropriate' | 'ok'
+  /** key ของ context chip ที่ pharmacist ติ๊ก (สำหรับกฎที่ต้องการ ICD-10) */
   contextKey?: RduContextKey
+  /** รหัส ICD-10 ที่ครอบคลุม template นี้ — โชว์ใน alert ให้ pharmacist เทียบ HIS */
+  icd10Include?: string[]
+  icd10Exclude?: string[]
+  /** หมายเหตุ ICD-10 เช่น "Pdx เท่านั้น", "ต้องมี V/W/X external cause ร่วม" */
+  icd10Note?: string
 }
 
 const RDU_CHECKS: RduCheck[] = [
   {
     id: 'rdu-uri-atb',
-    name: 'ATB ใน URI',
+    name: 'ATB ใน URI / หลอดลมอักเสบเฉียบพลัน',
     target: '≤ 20%',
     source: 'RDU MOPH รายงาน 1',
     reason: 'การติดเชื้อทางเดินหายใจส่วนบนส่วนใหญ่เกิดจากไวรัส — ATB ไม่ช่วยและไม่จำเป็น',
     triggerLabel: 'ยาปฏิชีวนะ (ATB)',
     triggerMatch: isAntibiotic,
     contextKey: 'URI',
-    evaluate: (_drugs, patient) => {
-      if (patient.rdu_context?.includes('URI')) return 'inappropriate'
-      return 'remind'
-    },
+    icd10Include: [
+      'J00', 'J01.0', 'J01.1', 'J01.2', 'J01.3', 'J01.4', 'J01.8', 'J01.9',
+      'J02.0', 'J02.8', 'J02.9',
+      'J03.0', 'J03.8', 'J03.9',
+      'J04.0', 'J04.1', 'J04.2',
+      'J05.0', 'J05.1',
+      'J06.0', 'J06.8', 'J06.9',
+      'J10.1', 'J11.1',
+      'J20.0', 'J20.1', 'J20.2', 'J20.3', 'J20.4', 'J20.5', 'J20.6', 'J20.7', 'J20.8', 'J20.9',
+      'J21.0', 'J21.8', 'J21.9',
+      'H65.0', 'H65.1', 'H65.9',
+      'H66.0', 'H66.4', 'H66.9',
+      'B05.3', 'J32.9',
+    ],
+    icd10Exclude: ['H67.0', 'H67.1', 'H67.8', 'H72.0', 'H72.1', 'H72.2', 'H72.8', 'H72.9'],
+    evaluate: (_drugs, patient) => patient.rdu_context?.includes('URI') ? 'inappropriate' : 'ok',
   },
   {
     id: 'rdu-diarrhea-atb',
@@ -124,10 +141,19 @@ const RDU_CHECKS: RduCheck[] = [
     triggerLabel: 'ยาปฏิชีวนะ (ATB)',
     triggerMatch: isAntibiotic,
     contextKey: 'DIARRHEA',
-    evaluate: (_drugs, patient) => {
-      if (patient.rdu_context?.includes('DIARRHEA')) return 'inappropriate'
-      return 'remind'
-    },
+    icd10Include: [
+      'A00', 'A00.0', 'A00.1', 'A00.9',
+      'A02.0',
+      'A03.0', 'A03.1', 'A03.2', 'A03.3', 'A03.8', 'A03.9',
+      'A04.0', 'A04.1', 'A04.2', 'A04.3', 'A04.4', 'A04.5', 'A04.6', 'A04.7', 'A04.8', 'A04.9',
+      'A05.0', 'A05.3', 'A05.4', 'A05.8', 'A05.9',
+      'A06.0', 'A06.1',
+      'A08.0', 'A08.1', 'A08.2', 'A08.3', 'A08.4', 'A08.5',
+      'A09', 'A09.0', 'A09.9',
+      'K52.1', 'K52.8', 'K52.9',
+    ],
+    icd10Note: 'A09 เป็น invalid code — แนะนำใช้ A09.0 หรือ A09.9',
+    evaluate: (_drugs, patient) => patient.rdu_context?.includes('DIARRHEA') ? 'inappropriate' : 'ok',
   },
   {
     id: 'rdu-nsaid-ckd3',
@@ -138,41 +164,44 @@ const RDU_CHECKS: RduCheck[] = [
     triggerLabel: 'NSAIDs / COX-2',
     triggerMatch: isNsaidOrCoxib,
     evaluate: (_drugs, patient) => {
-      // มี eGFR — เช็คอัตโนมัติ
-      if (patient.egfr !== undefined) {
-        return patient.egfr < 60 ? 'inappropriate' : 'ok'
-      }
-      // ไม่มี eGFR → เตือนให้ check
-      return 'remind'
+      if (patient.egfr !== undefined) return patient.egfr < 60 ? 'inappropriate' : 'ok'
+      return 'ok'  // ไม่มี eGFR → ไม่เตือน (กลไก renal/CKD ของระบบจัดการแยก)
     },
   },
   {
     id: 'rdu-normal-labor-atb',
     name: 'ATB ในคลอดปกติ',
     target: '≤ 10%',
-    source: 'RDU MOPH รายงาน 4 (Pdx O80.0)',
+    source: 'RDU MOPH รายงาน 4',
     reason: 'คลอดปกติทางช่องคลอด (Pdx O80.0) ไม่ต้องการ ATB',
     triggerLabel: 'ยาปฏิชีวนะ (ATB)',
     triggerMatch: isAntibiotic,
     contextKey: 'NORMAL_LABOR',
-    evaluate: (_drugs, patient) => {
-      if (patient.rdu_context?.includes('NORMAL_LABOR')) return 'inappropriate'
-      return 'remind'
-    },
+    icd10Include: ['O80.0'],
+    icd10Note: 'ใช้เป็น Pdx (Principal Diagnosis) เท่านั้น · IPD',
+    evaluate: (_drugs, patient) => patient.rdu_context?.includes('NORMAL_LABOR') ? 'inappropriate' : 'ok',
   },
   {
     id: 'rdu-trauma-atb',
     name: 'ATB ในบาดแผลสด/อุบัติเหตุ',
     target: '3.1 ≤ 40% · 3.2 monitoring',
     source: 'RDU MOPH รายงาน 3.1/3.2',
-    reason: 'บาดแผลสดส่วนใหญ่ไม่จำเป็นต้อง ATB — เว้นแผลสัตว์กัด แผลลึกถึงกล้าม แผลไหม้',
+    reason: 'บาดแผลสดส่วนใหญ่ไม่จำเป็นต้อง ATB — เว้นแผลสัตว์กัด แผลลึกถึงกล้าม แผลไหม้น้ำร้อนลวก',
     triggerLabel: 'ยาปฏิชีวนะ (ATB)',
     triggerMatch: isAntibiotic,
     contextKey: 'TRAUMA',
-    evaluate: (_drugs, patient) => {
-      if (patient.rdu_context?.includes('TRAUMA')) return 'inappropriate'
-      return 'remind'
-    },
+    icd10Include: [
+      'S00-S01', 'S09.1', 'S09.8', 'S09.9', 'S10.7-S10.9', 'S11.7-S11.9',
+      'S16', 'S19', 'S20-S21', 'S29', 'S30-S31', 'S39.0', 'S39.8-S39.9',
+      'S40-S41', 'S46', 'S49', 'S50-S51', 'S56', 'S59', 'S60-S61', 'S66',
+      'S69', 'S70-S71', 'S76', 'S79', 'S80-S81', 'S86', 'S89', 'S90-S91',
+      'S96', 'S99',
+      'T00-T01', 'T07', 'T09.0-T09.1', 'T09.5', 'T11.0-T11.1', 'T11.5',
+      'T13.0-T13.1', 'T13.5', 'T14.0-T14.1', 'T14.6', 'T14.9',
+      'T20-T25', 'T29-T32',
+    ],
+    icd10Note: 'ต้องมี ICD-10 external cause ร่วม: V01-V99, W00-W99, X00-X59',
+    evaluate: (_drugs, patient) => patient.rdu_context?.includes('TRAUMA') ? 'inappropriate' : 'ok',
   },
   {
     id: 'rdu-longacting-benzo-elderly',
@@ -184,7 +213,6 @@ const RDU_CHECKS: RduCheck[] = [
     triggerMatch: (d) => isLongActingBenzo(d) && isOral(d),
     evaluate: (_drugs, patient) => {
       if (patient.age !== undefined && patient.age >= 65) return 'inappropriate'
-      if (patient.age === undefined) return 'remind'
       return 'ok'
     },
   },
@@ -199,21 +227,30 @@ export function buildRduAlerts(drugs: DrugEntry[], patient: PatientInput): Scree
     const verdict = check.evaluate(triggerDrugs, patient)
     if (verdict === 'ok') continue
     const drugNames = triggerDrugs.map((d) => d.master?.drug_name ?? d.icode).join(', ')
-    const inappropriate = verdict === 'inappropriate'
+
+    // สร้าง ICD-10 section ถ้ามี — ใช้เป็น checklist เทียบ HIS
+    const icdLines: string[] = []
+    if (check.icd10Include?.length) {
+      icdLines.push(`📌 ผู้ป่วยรายนี้ต้องไม่มี ICD-10:\n${check.icd10Include.join(', ')}`)
+      if (check.icd10Exclude?.length) {
+        icdLines.push(`(ยกเว้นรหัสที่ระบุไม่นับ: ${check.icd10Exclude.join(', ')})`)
+      }
+      if (check.icd10Note) icdLines.push(`หมายเหตุ: ${check.icd10Note}`)
+    }
+
     alerts.push({
       id: `rdu_${check.id}`,
       type: 'RDU',
-      severity: inappropriate ? 'orange' : 'blue',
-      title: inappropriate
-        ? `📋 RDU: ${check.name} — อาจไม่เหมาะสม`
-        : `📋 RDU: ${check.name} — ตรวจสอบเพิ่ม`,
-      detail: inappropriate
-        ? `${check.reason}\nยา: ${drugNames}\nเป้าหมาย: ${check.target} · ${check.source}`
-        : `พบยา ${check.triggerLabel} (${drugNames}) — ${check.contextKey ? 'ติ๊ก context ผู้ป่วยด้านบนเพื่อตรวจ' : 'กรอกข้อมูลที่เกี่ยวข้องเพื่อตรวจอัตโนมัติ'}\n${check.reason}\nเป้าหมาย: ${check.target} · ${check.source}`,
+      severity: 'orange',
+      title: `📋 RDU: ${check.name} — อาจไม่เหมาะสม`,
+      detail: [
+        check.reason,
+        `ยา: ${drugNames}`,
+        ...icdLines,
+        `เป้าหมาย: ${check.target} · ${check.source}`,
+      ].join('\n'),
       drugs: triggerDrugs.map((d) => d.icode),
-      recommendation: inappropriate
-        ? 'พิจารณาความจำเป็น · ถ้าไม่ตรงเกณฑ์ → พิจารณาไม่จ่ายและ counseling ผู้ป่วย'
-        : undefined,
+      recommendation: 'ถ้าผู้ป่วยมี ICD-10 ในรายการข้างต้น → พิจารณาไม่จ่าย + counseling',
     })
   }
   return alerts
