@@ -173,11 +173,9 @@ export function computeRequiredFields(drugs: DrugEntry[]): RequiredField[] {
     if (hasPed) {
       add('weight', 'น้ำหนัก', 'kg', `${name} → คำนวณขนาดยาเด็ก (mg/kg/dose)`, 'high')
     }
-    // 5b) ยาน้ำที่ยังไม่มี pediatric_dose ใน LAB_RULES — ก็ยังต้องการน้ำหนัก
-    //     เพราะใช้สูตร mg/kg แบบมาตรฐานคำนวณ adhoc ในใบสั่งจริง
-    if (syrup && !hasPed) {
-      add('weight', 'น้ำหนัก', 'kg', `${name} (ยาน้ำ) → ใช้น้ำหนักคำนวณขนาดยา`, 'high')
-    }
+    // (เคยมีกฎ 5b: ยาน้ำที่ไม่มี pediatric_dose ก็ขอ weight — false-positive กับยาน้ำ
+    //  ที่ไม่ใช้ mg/kg เช่น alum milk, simethicone, antacid suspension ลบทิ้ง
+    //  ถ้าอยากให้ระบบขอน้ำหนัก ต้อง set pediatric rule ใน LAB_RULES ตรง ๆ)
     // 6) Smoking interaction — adult-specific
     if (d.master?.smoking_interaction && !syrup) {
       add('smoking', 'สูบบุหรี่', undefined, `${name} มีปฏิกิริยากับบุหรี่`, 'medium')
