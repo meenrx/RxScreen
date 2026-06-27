@@ -168,10 +168,16 @@ export function computeRequiredFields(drugs: DrugEntry[]): RequiredField[] {
     if (d.master?.beers_avoid_elderly && !syrup) {
       add('age', 'อายุ', 'ปี', `${name} อยู่ใน Beers (≥65 ปี)`, 'high')
     }
-    // 5) Pediatric dose → ขอแค่ "น้ำหนัก" (คำนวณ mg/kg/dose) ไม่ต้องขอเพศ/อายุ
-    const hasPed = d.labRules?.some((r) => r.pediatric_dose || r.min_dose_kg || r.max_dose_kg)
-    if (hasPed) {
-      add('weight', 'น้ำหนัก', 'kg', `${name} → คำนวณขนาดยาเด็ก (mg/kg/dose)`, 'high')
+    // 5) Pediatric dose → ขอ "น้ำหนัก" (mg/kg) และ/หรือ "อายุ" (band ตามอายุ)
+    const hasPedWeight = d.labRules?.some((r) =>
+      r.pediatric_dose || r.min_dose_kg || r.max_dose_kg || r.dose_by_weight,
+    )
+    if (hasPedWeight) {
+      add('weight', 'น้ำหนัก', 'kg', `${name} → คำนวณขนาดยาเด็กตามน้ำหนัก`, 'high')
+    }
+    const hasPedAge = d.labRules?.some((r) => r.dose_by_age_months)
+    if (hasPedAge) {
+      add('age', 'อายุ', 'ปี (เด็กเล็กกรอกทศนิยม เช่น 0.5 = 6 เดือน)', `${name} → ขนาดยาเด็กตามช่วงอายุ`, 'high')
     }
     // (เคยมีกฎ 5b: ยาน้ำที่ไม่มี pediatric_dose ก็ขอ weight — false-positive กับยาน้ำ
     //  ที่ไม่ใช้ mg/kg เช่น alum milk, simethicone, antacid suspension ลบทิ้ง

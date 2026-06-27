@@ -225,40 +225,62 @@ export function buildRenalAlerts(drugs: DrugEntry[], patient: PatientInput): Scr
 // ============ Pediatric ============
 export function buildPediatricAlerts(drugs: DrugEntry[], patient: PatientInput): ScreeningAlert[] {
   // ใช้ "น้ำหนัก" เป็นหลัก (ไม่ต้องใช้เพศ); แสดงเมื่อไม่ใช่ผู้ใหญ่ชัดเจน
-  if (!patient.weight) return []
   if (patient.age !== undefined && patient.age >= 15) return []
   const wt = patient.weight
+  const ageMonths = patient.age !== undefined ? patient.age * 12 : undefined
   const alerts: ScreeningAlert[] = []
   for (const d of drugs) {
-    const rule = d.labRules?.find((r) => r.pediatric_dose || r.min_dose_kg || r.max_dose_kg)
+    const rule = d.labRules?.find((r) =>
+      r.pediatric_dose || r.min_dose_kg || r.max_dose_kg
+      || r.dose_by_weight || r.dose_by_age_months,
+    )
     if (!rule) continue
-    const calc = computePediatricDose(wt, rule)
+
+    // band lookup ตามน้ำหนัก / อายุ (ใช้ตัว parser เดียวกับ renal)
+    const byWeight = (wt !== undefined && rule.dose_by_weight)
+      ? findMatchingDoseAction(rule.dose_by_weight, wt) : null
+    const byAge = (ageMonths !== undefined && rule.dose_by_age_months)
+      ? findMatchingDoseAction(rule.dose_by_age_months, ageMonths) : null
+
+    // mg/kg linear calc
+    const calc = wt !== undefined ? computePediatricDose(wt, rule) : null
     const strength = d.master?.strength ? `ความแรง ${d.master.strength}` : null
 
-    let detail: string
+    const lines: string[] = []
+    if (byWeight) lines.push(`⚖️ น้ำหนัก ${wt} kg → ${byWeight}`)
+    if (byAge) {
+      const yLabel = patient.age !== undefined && patient.age < 2
+        ? `${ageMonths} เดือน`
+        : `${patient.age} ปี (${ageMonths} เดือน)`
+      lines.push(`🎂 อายุ ${yLabel} → ${byAge}`)
+    }
     if (calc && (calc.minMgPerDose !== undefined || calc.maxMgPerDose !== undefined)) {
       const mgRange = [calc.minMgPerDose, calc.maxMgPerDose].filter((x) => x !== undefined).join('–')
-      const lines: string[] = [`น้ำหนัก ${wt} kg → ${mgRange} mg/ครั้ง`]
+      lines.push(`📐 mg/kg: ${wt} kg → ${mgRange} mg/ครั้ง`)
       if (calc.mgPerMl && (calc.minMlPerDose !== undefined || calc.maxMlPerDose !== undefined)) {
         const mlRange = [calc.minMlPerDose, calc.maxMlPerDose].filter((x) => x !== undefined).join('–')
         lines.push(`= ${mlRange} mL/ครั้ง (ความแรง ${calc.concLabel})`)
       }
       if (calc.frequency) lines.push(`ความถี่: ${calc.frequency}`)
       if (calc.maxPerDay !== undefined) lines.push(`ไม่เกิน ${calc.maxPerDay} mg/วัน`)
-      if (rule.pediatric_dose) lines.push(`อ้างอิง: ${rule.pediatric_dose}`)
-      detail = lines.join(' · ')
-    } else {
-      detail = [rule.pediatric_dose, strength].filter(Boolean).join(' · ') || 'ดูขนาดยาเด็ก'
     }
+    if (rule.pediatric_dose) lines.push(`อ้างอิง: ${rule.pediatric_dose}`)
+    if (lines.length === 0) {
+      lines.push([rule.pediatric_dose, strength].filter(Boolean).join(' · ') || 'ดูขนาดยาเด็ก')
+    }
+
+    // recommendation: prefer band match (most specific)
+    const recommendation = byWeight ?? byAge ?? undefined
 
     alerts.push({
       id: `ped_${d.icode}`,
       type: 'PED',
       severity: 'blue',
       title: `👶 ขนาดยาเด็ก: ${d.master?.drug_name ?? d.icode}`,
-      detail,
+      detail: lines.join(' · '),
       drugs: [d.icode],
       source: rule,
+      recommendation,
     })
   }
   return alerts

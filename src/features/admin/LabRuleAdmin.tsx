@@ -407,6 +407,41 @@ export function LabRuleAdmin() {
                   </div>
                 </div>
               </div>
+
+              {/* Band-based dose by weight */}
+              <div className="rounded-xl border p-3 space-y-2 bg-muted/20">
+                <div className="text-sm font-semibold flex items-center gap-2">
+                  ⚖️ ขนาดยาตามน้ำหนัก (band)
+                  <HelpHint title="ขนาดยาตามน้ำหนัก">
+                    ใช้เมื่อยาแบ่งขนาดเป็นช่วง weight เช่น<br />
+                    <code className="block bg-muted p-1 rounded my-1 text-[11px]">&lt;10:125 mg q8h; 10-20:250 mg q8h; &gt;20:500 mg q8h</code>
+                    ระบบจะ match band ที่ตรงน้ำหนักผู้ป่วยและแสดงในผลคัดกรอง
+                  </HelpHint>
+                </div>
+                <DoseMetaBuilder
+                  value={edit.dose_by_weight}
+                  onChange={(v) => setEdit({ ...edit, dose_by_weight: v })}
+                  basisLabel="น้ำหนัก (kg)"
+                />
+              </div>
+
+              {/* Band-based dose by age (months) */}
+              <div className="rounded-xl border p-3 space-y-2 bg-muted/20">
+                <div className="text-sm font-semibold flex items-center gap-2">
+                  🎂 ขนาดยาตามอายุ — หน่วย "เดือน"
+                  <HelpHint title="ขนาดยาตามอายุ">
+                    ใช้เมื่อยาแบ่งขนาดเป็นช่วงอายุ เช่น<br />
+                    <code className="block bg-muted p-1 rounded my-1 text-[11px]">&lt;6:0.4 mL; 6-12:0.6 mL; 12-24:0.8 mL; 24-72:1.2 mL</code>
+                    <b>หน่วยเป็นเดือน</b> — ระบบจะ × 12 อายุปีจากฟอร์มอัตโนมัติ<br />
+                    (เภสัชกรกรอกอายุ 0.5 = 6 เดือน, 1.5 = 18 เดือน)
+                  </HelpHint>
+                </div>
+                <DoseMetaBuilder
+                  value={edit.dose_by_age_months}
+                  onChange={(v) => setEdit({ ...edit, dose_by_age_months: v })}
+                  basisLabel="อายุ (เดือน)"
+                />
+              </div>
             </div>
           )}
           <DialogFooter>

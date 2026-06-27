@@ -114,6 +114,14 @@ export interface LabRule {
    *  'egfr' = ให้ผู้ใช้กรอก eGFR ตรง ๆ. ไม่ระบุ = เดาจาก dose_meta/param (default crcl) */
   renal_basis?: 'crcl' | 'egfr'
   pediatric_dose?: string
+  /** ขนาดยาตามน้ำหนัก (band format เดียวกับ dose_meta)
+   *  เช่น "<10:125 mg q8h; 10-20:250 mg q8h; >20:500 mg q8h"
+   *  ใช้คู่กับ patient.weight (kg) */
+  dose_by_weight?: string
+  /** ขนาดยาตามอายุ (หน่วยเดือน — แม่นกว่าปีในเด็กเล็ก)
+   *  เช่น "<6:0.4 mL; 6-12:0.6 mL; 12-24:0.8 mL; 24-72:1.2 mL"
+   *  ใช้คู่กับ patient.age × 12 (auto convert จากปีในฟอร์ม) */
+  dose_by_age_months?: string
   /** ความแรงยาน้ำต่อ 5 mL เช่น "250 mg/5 mL" หรือเลข mg ต่อ 5mL — ใช้คำนวณ mL/dose เด็ก */
   conc_per_5ml?: string
   /** ข้อบ่งใช้ */
