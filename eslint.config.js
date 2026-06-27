@@ -19,5 +19,14 @@ export default tseslint.config([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
+      // โปรเจกต์นี้ co-locate helper functions ไว้กับ component โดยตั้งใจ
+      // (เช่น parseQrPayload, hasWarfarin, badgeVariants) — fast-refresh เป็น dev-only
+      'react-refresh/only-export-components': 'off',
+    },
   },
 ])

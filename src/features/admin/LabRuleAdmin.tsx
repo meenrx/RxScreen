@@ -74,7 +74,6 @@ function DoseMetaBuilder({ value, onChange, basisLabel }: BuilderProps) {
   useEffect(() => {
     setRows(parseDoseMetaRows(value ?? ''))
     setRaw(value ?? '')
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value])
 
   function commit(next: DoseRow[]) {

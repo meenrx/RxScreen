@@ -27,9 +27,19 @@ export async function getDrugByIcode(icode: string): Promise<DrugMaster | null> 
   return { id: d.id, ...(d.data() as DrugMaster) }
 }
 
+// ตัดฟิลด์ที่เป็น undefined ออก (Firestore ไม่รับ undefined)
+// เช่น pregnancy_category ที่ปล่อย "ไม่ระบุ" — ยาน้ำบางตัวไม่ต้องเช็คการตั้งครรภ์
+function stripUndefined<T extends Record<string, unknown>>(o: T): Partial<T> {
+  return Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as Partial<T>
+}
+
 export async function saveDrug(drug: DrugMaster): Promise<string> {
   const id = drug.id ?? drug.icode
-  await setDoc(doc(db, 'DRUG_MASTER', id), { ...drug, updatedAt: serverTimestamp() }, { merge: true })
+  await setDoc(
+    doc(db, 'DRUG_MASTER', id),
+    { ...stripUndefined(drug as unknown as Record<string, unknown>), updatedAt: serverTimestamp() },
+    { merge: true },
+  )
   return id
 }
 

@@ -26,8 +26,8 @@ export default function DashboardPage() {
     [interventions],
   )
 
-  const today = new Date()
-  const todayList = useMemo(() => history.filter((h) => sameDay(h.createdAt, today)), [history])
+  const today = useMemo(() => new Date(), [])
+  const todayList = useMemo(() => history.filter((h) => sameDay(h.createdAt, today)), [history, today])
   const myToday = useMemo(() => todayList.filter((h) => h.pharmacist_uid === user?.uid).length, [todayList, user])
   const totalAlerts = useMemo(() => history.reduce((s, h) => s + (h.alerts_count ?? 0), 0), [history])
   const redAlertsToday = useMemo(() => todayList.reduce((s, h) => s + (h.alerts_count ?? 0), 0), [todayList])

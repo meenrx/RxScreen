@@ -6,12 +6,10 @@ import { DdiAdmin } from '@/features/admin/DdiAdmin'
 import { CounselingAdmin } from '@/features/admin/CounselingAdmin'
 import { DiseaseAdmin } from '@/features/admin/DiseaseAdmin'
 import { UsersAdmin } from '@/features/admin/UsersAdmin'
-import { ImportSheet } from '@/features/admin/ImportSheet'
-import { JsonImportAdmin } from '@/features/admin/JsonImportAdmin'
 import { HadRuleAdmin } from '@/features/admin/HadRuleAdmin'
 
 export default function AdminPage() {
-  const [tab, setTab] = useState('import')
+  const [tab, setTab] = useState('drugs')
   return (
     <div className="space-y-4 max-w-7xl mx-auto">
       <div>
@@ -20,8 +18,6 @@ export default function AdminPage() {
       </div>
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="overflow-x-auto max-w-full">
-          <TabsTrigger value="import">📥 นำเข้า Sheet</TabsTrigger>
-          <TabsTrigger value="import-json">📦 Import JSON + Rollback</TabsTrigger>
           <TabsTrigger value="drugs">ยา (DRUG_MASTER)</TabsTrigger>
           <TabsTrigger value="lab">Lab/Dose</TabsTrigger>
           <TabsTrigger value="ddi">DDI</TabsTrigger>
@@ -30,8 +26,6 @@ export default function AdminPage() {
           <TabsTrigger value="disease">Disease</TabsTrigger>
           <TabsTrigger value="users">ผู้ใช้</TabsTrigger>
         </TabsList>
-        <TabsContent value="import"><ImportSheet /></TabsContent>
-        <TabsContent value="import-json"><JsonImportAdmin /></TabsContent>
         <TabsContent value="drugs"><DrugMasterAdmin /></TabsContent>
         <TabsContent value="lab"><LabRuleAdmin /></TabsContent>
         <TabsContent value="ddi"><DdiAdmin /></TabsContent>

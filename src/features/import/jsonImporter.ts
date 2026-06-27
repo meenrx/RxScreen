@@ -599,7 +599,7 @@ export async function runImport(opts: RunImportOptions): Promise<ImportResult> {
   for (let i = 0; i < drugsMapped.length; i += 400) {
     const batch = writeBatch(db)
     for (const d of drugsMapped.slice(i, i + 400)) {
-      batch.set(doc(db, 'DRUG_MASTER', d.icode), { ...clean(d as any), updatedAt: serverTimestamp() }, { merge: true })
+      batch.set(doc(db, 'DRUG_MASTER', d.icode), { ...clean(d as unknown as Record<string, unknown>), updatedAt: serverTimestamp() }, { merge: true })
     }
     await batch.commit()
   }
@@ -609,7 +609,7 @@ export async function runImport(opts: RunImportOptions): Promise<ImportResult> {
   for (let i = 0; i < labWrites.length; i += 400) {
     const batch = writeBatch(db)
     for (const w of labWrites.slice(i, i + 400)) {
-      batch.set(doc(db, 'LAB_RULES', w.docId), { ...clean(w.rule as any), updatedAt: serverTimestamp() }, { merge: true })
+      batch.set(doc(db, 'LAB_RULES', w.docId), { ...clean(w.rule as unknown as Record<string, unknown>), updatedAt: serverTimestamp() }, { merge: true })
     }
     await batch.commit()
   }
@@ -619,7 +619,7 @@ export async function runImport(opts: RunImportOptions): Promise<ImportResult> {
   for (let i = 0; i < ddiWrites.length; i += 400) {
     const batch = writeBatch(db)
     for (const w of ddiWrites.slice(i, i + 400)) {
-      batch.set(doc(db, 'DDI_OVERRIDE', w.docId), { ...clean(w.ddi as any), updatedAt: serverTimestamp() }, { merge: true })
+      batch.set(doc(db, 'DDI_OVERRIDE', w.docId), { ...clean(w.ddi as unknown as Record<string, unknown>), updatedAt: serverTimestamp() }, { merge: true })
     }
     await batch.commit()
   }
@@ -639,7 +639,7 @@ export async function runImport(opts: RunImportOptions): Promise<ImportResult> {
   for (let i = 0; i < counselingWrites.length; i += 400) {
     const batch = writeBatch(db)
     for (const w of counselingWrites.slice(i, i + 400)) {
-      batch.set(doc(db, 'DRUG_COUNSELING', w.docId), { ...clean(w.data as any), updatedAt: serverTimestamp() }, { merge: true })
+      batch.set(doc(db, 'DRUG_COUNSELING', w.docId), { ...clean(w.data as unknown as Record<string, unknown>), updatedAt: serverTimestamp() }, { merge: true })
     }
     await batch.commit()
   }
@@ -649,7 +649,7 @@ export async function runImport(opts: RunImportOptions): Promise<ImportResult> {
   for (let i = 0; i < hadWrites.length; i += 400) {
     const batch = writeBatch(db)
     for (const w of hadWrites.slice(i, i + 400)) {
-      batch.set(doc(db, 'HAD_RULES', w.docId), { ...clean(w.data as any), updatedAt: serverTimestamp() }, { merge: true })
+      batch.set(doc(db, 'HAD_RULES', w.docId), { ...clean(w.data as unknown as Record<string, unknown>), updatedAt: serverTimestamp() }, { merge: true })
     }
     await batch.commit()
   }

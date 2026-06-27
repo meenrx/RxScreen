@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app'
 import { getAuth } from 'firebase/auth'
-import { getFirestore } from 'firebase/firestore'
+import { initializeFirestore } from 'firebase/firestore'
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -13,4 +13,6 @@ const firebaseConfig = {
 
 export const app = initializeApp(firebaseConfig)
 export const auth = getAuth(app)
-export const db = getFirestore(app)
+// ignoreUndefinedProperties: ข้ามฟิลด์ที่เป็น undefined แทนที่จะ throw
+// (เช่น เลือก Pregnancy เป็น "-" จะได้ pregnancy_category: undefined)
+export const db = initializeFirestore(app, { ignoreUndefinedProperties: true })
