@@ -27,6 +27,9 @@ export interface PatientInput {
   /** RDU context flags ที่เภสัชกร tick ว่าผู้ป่วยมา OPD ด้วยอาการ/diagnosis อะไร
    *  เพื่อให้ระบบเช็คเกณฑ์ RDU MOPH เช่น 'URI' / 'DIARRHEA' / 'NORMAL_LABOR' / 'TRAUMA' */
   rdu_context?: string[]
+  /** ข้อบ่งใช้ที่เภสัชกรเลือก ต่อยา — ใช้กรณียาตัวเดียวมีหลาย LAB_RULE ต่อข้อบ่งใช้
+   *  key = icode, value = ข้อความ indication ที่ตรงกับ rule.indication */
+  selected_indications?: Record<string, string>
 }
 
 export interface DrugEntry {

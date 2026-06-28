@@ -23,6 +23,30 @@ function classMatches(entry: DrugEntry, drugClass: string | undefined): boolean 
   return nameEq(entry.master?.drug_class, drugClass)
 }
 
+/** กรอง labRules ของยาตาม indication ที่เภสัชกรเลือก
+ *   - ถ้าเลือกแล้ว → ใช้เฉพาะ rule ที่ indication ตรง + rule ที่ไม่ได้ระบุ indication (default — ใช้ได้ทุกข้อบ่งใช้)
+ *   - ถ้ายังไม่เลือก → คืนทั้งหมด (ปล่อยให้ alert โชว์ทุกตัว เพื่อให้เภสัชกรเห็นแล้วเลือก) */
+function filterRulesByIndication(drug: DrugEntry, patient: PatientInput): LabRule[] {
+  const rules = drug.labRules ?? []
+  const selected = patient.selected_indications?.[drug.icode]?.trim()
+  if (!selected) return rules
+  return rules.filter((r) => {
+    const ind = r.indication?.trim()
+    if (!ind) return true  // default rule — ใช้ได้ทุก indication
+    return ind === selected
+  })
+}
+
+/** หา list ของ indication ที่ยาตัวนี้รองรับ (unique, ไม่นับ default) */
+export function getDrugIndications(drug: DrugEntry): string[] {
+  const set = new Set<string>()
+  for (const r of drug.labRules ?? []) {
+    const ind = r.indication?.trim()
+    if (ind) set.add(ind)
+  }
+  return [...set].sort()
+}
+
 // ============ DDI ============
 export function buildDdiAlerts(drugs: DrugEntry[], ddiList: DdiOverride[]): ScreeningAlert[] {
   const alerts: ScreeningAlert[] = []
@@ -67,7 +91,13 @@ function labelSev(s: DdiOverride['severity']) {
 export function buildLabAlerts(drugs: DrugEntry[], labRules: LabRule[], patient: PatientInput): ScreeningAlert[] {
   const alerts: ScreeningAlert[] = []
   for (const drug of drugs) {
-    const rules = labRules.filter((r) => r.icode === drug.icode)
+    const allRulesForDrug = labRules.filter((r) => r.icode === drug.icode)
+    // กรองตาม indication: ใช้ rule.id เป็น key — ถ้า drug.labRules มี id ตรงกัน → คือ allowed
+    const allowedIds = new Set(filterRulesByIndication(
+      { ...drug, labRules: allRulesForDrug },
+      patient,
+    ).map((r) => r.id).filter((id): id is string => !!id))
+    const rules = allRulesForDrug.filter((r) => !r.indication?.trim() || (r.id && allowedIds.has(r.id)))
     for (const r of rules) {
       // ข้าม rule ที่เป็น "renal dose adjustment" — จะไป trigger RENAL alert แยก
       // ไม่งั้นเด้ง LAB monitor ซ้ำซ้อนกับ RENAL ที่บอก action แล้ว
@@ -195,7 +225,8 @@ function resolveGfr(
 export function buildRenalAlerts(drugs: DrugEntry[], patient: PatientInput): ScreeningAlert[] {
   const alerts: ScreeningAlert[] = []
   for (const drug of drugs) {
-    const rule = drug.labRules?.find((r) => r.dose_meta)
+    const allowed = filterRulesByIndication(drug, patient)
+    const rule = allowed.find((r) => r.dose_meta)
     if (!rule?.dose_meta) continue
     const resolved = resolveGfr(rule, patient)
     if (!resolved) continue
@@ -208,11 +239,12 @@ export function buildRenalAlerts(drugs: DrugEntry[], patient: PatientInput): Scr
       /reduce|adjust|q24|q48|ลด|ปรับ/i.test(action) ? 'orange' : 'yellow'
     const drugName = drug.master?.drug_name ?? drug.icode
     const icon = isHardStop ? '🚫' : '⚠️'
+    const indTag = rule.indication?.trim() ? ` 📍 ${rule.indication.trim()}` : ''
     alerts.push({
-      id: `renal_${drug.icode}`,
+      id: `renal_${drug.icode}_${rule.indication ?? ''}`,
       type: 'RENAL',
       severity: sev,
-      title: `${icon} ${drugName}: ${action} (${label}=${gfr})`,
+      title: `${icon} ${drugName}${indTag}: ${action} (${label}=${gfr})`,
       detail: `${label} = ${gfr} mL/min — เกณฑ์: ${formatDoseMetaForDisplay(rule.dose_meta)}`,
       drugs: [drug.icode],
       source: rule,
@@ -230,7 +262,8 @@ export function buildPediatricAlerts(drugs: DrugEntry[], patient: PatientInput):
   const ageMonths = patient.age !== undefined ? patient.age * 12 : undefined
   const alerts: ScreeningAlert[] = []
   for (const d of drugs) {
-    const rule = d.labRules?.find((r) =>
+    const allowed = filterRulesByIndication(d, patient)
+    const rule = allowed.find((r) =>
       r.pediatric_dose || r.min_dose_kg || r.max_dose_kg
       || r.dose_by_weight || r.dose_by_age_months,
     )
@@ -272,11 +305,12 @@ export function buildPediatricAlerts(drugs: DrugEntry[], patient: PatientInput):
     // recommendation: prefer band match (most specific)
     const recommendation = byWeight ?? byAge ?? undefined
 
+    const indTag = rule.indication?.trim() ? ` (📍 ${rule.indication.trim()})` : ''
     alerts.push({
-      id: `ped_${d.icode}`,
+      id: `ped_${d.icode}_${rule.indication ?? ''}`,
       type: 'PED',
       severity: 'blue',
-      title: `👶 ขนาดยาเด็ก: ${d.master?.drug_name ?? d.icode}`,
+      title: `👶 ขนาดยาเด็ก: ${d.master?.drug_name ?? d.icode}${indTag}`,
       detail: lines.join(' · '),
       drugs: [d.icode],
       source: rule,

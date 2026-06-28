@@ -239,6 +239,9 @@ export function LabRuleAdmin() {
                 <TableCell>
                   <div className="font-medium text-sm">{drugMap.get(d.icode) ?? d.drug_name ?? '-'}</div>
                   <div className="font-mono text-[10px] text-muted-foreground">{d.icode}</div>
+                  {d.indication && (
+                    <div className="text-[10px] text-amber-700 dark:text-amber-300 mt-0.5">📍 {d.indication}</div>
+                  )}
                 </TableCell>
                 <TableCell>{d.param}</TableCell>
                 <TableCell className="text-sm">{d.normal_range ?? '-'} {d.unit}</TableCell>
@@ -264,19 +267,41 @@ export function LabRuleAdmin() {
           </DialogHeader>
           {edit && (
             <div className="space-y-4">
-              {/* Drug selector */}
-              <div>
-                <Label className="mb-1.5 flex items-center gap-2">
-                  ยา <span className="text-red-500">*</span>
-                  <HelpHint title="ยา">เลือกยาจากรายการในระบบ — พิมพ์ชื่อยา (Amoxycillin, Warfarin ฯลฯ) แล้วเลือก ระบบจะดึง icode ให้</HelpHint>
-                </Label>
-                <DrugCombobox
-                  drugs={drugs}
-                  value={edit.icode}
-                  onChange={(icode, drug) => setEdit({ ...edit, icode, drug_name: drug?.drug_name })}
-                  placeholder="พิมพ์ชื่อยา…"
-                  autoFocus
-                />
+              {/* Drug selector + indication */}
+              <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3">
+                <div>
+                  <Label className="mb-1.5 flex items-center gap-2">
+                    ยา <span className="text-red-500">*</span>
+                    <HelpHint title="ยา">เลือกยาจากรายการในระบบ — พิมพ์ชื่อยา (Amoxycillin, Warfarin ฯลฯ) แล้วเลือก ระบบจะดึง icode ให้</HelpHint>
+                  </Label>
+                  <DrugCombobox
+                    drugs={drugs}
+                    value={edit.icode}
+                    onChange={(icode, drug) => setEdit({ ...edit, icode, drug_name: drug?.drug_name })}
+                    placeholder="พิมพ์ชื่อยา…"
+                    autoFocus
+                  />
+                </div>
+                <div className="md:w-[260px]">
+                  <Label className="mb-1.5 flex items-center gap-2">
+                    ข้อบ่งใช้
+                    <HelpHint title="ข้อบ่งใช้ (indication)">
+                      ใช้เมื่อยาตัวเดียวกันมีขนาดต่างกันต่อข้อบ่งใช้ เช่น<br />
+                      <b>Amoxicillin</b>:<br />
+                      • Otitis media → 40-45 mg/kg q12h<br />
+                      • Strep pharyngitis → 25 mg/kg q12h<br />
+                      • UTI → 20-25 mg/kg q8h<br /><br />
+                      ทำ <b>rule แยกต่อ indication</b> — เภสัชกรจะเลือก indication ตอนคัดกรอง ระบบจะกรองให้โชว์เฉพาะ rule ที่ตรง<br />
+                      <b>ถ้าเว้นว่าง</b> = rule ใช้ได้ทุก indication (default)
+                    </HelpHint>
+                  </Label>
+                  <Input
+                    value={edit.indication ?? ''}
+                    onChange={(e) => setEdit({ ...edit, indication: e.target.value })}
+                    placeholder="เช่น Otitis media · เว้นว่าง = default"
+                    className="h-10"
+                  />
+                </div>
               </div>
 
               {/* Lab/monitoring params */}

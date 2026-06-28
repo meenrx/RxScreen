@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { calcCrCl } from '@/features/renal/calc'
 import { computeRequiredFields, isFieldFilled, type FieldId } from './requiredFields'
+import { getDrugIndications } from './engine'
 import { getActiveRduTriggers, RDU_CONTEXT_OPTIONS, type RduContextKey } from './rduRules'
 import { cn } from '@/lib/utils'
 import type { DrugEntry, PatientInput } from '@/types/screening'
@@ -18,8 +19,24 @@ interface Props {
 const COMMON_DISEASES = ['CKD', 'DM', 'HT', 'CAD', 'CHF', 'Asthma', 'COPD', 'Liver', 'Stroke']
 
 export function SmartPatientForm({ drugs, value, onChange }: Props) {
-  const required = useMemo(() => computeRequiredFields(drugs), [drugs])
+  const required = useMemo(() => computeRequiredFields(drugs, value), [drugs, value])
   const requiredIds = useMemo(() => new Set(required.map((r) => r.id)), [required])
+
+  // ยาที่มี LAB_RULES หลาย indication → ต้องให้เภสัชกรเลือก
+  const multiIndicationDrugs = useMemo(
+    () => drugs
+      .map((d) => ({ drug: d, indications: getDrugIndications(d) }))
+      .filter((x) => x.indications.length >= 2),
+    [drugs],
+  )
+
+  function setIndication(icode: string, ind: string | null) {
+    const cur = value.selected_indications ?? {}
+    const next = { ...cur }
+    if (ind === null) delete next[icode]
+    else next[icode] = ind
+    onChange({ ...value, selected_indications: next })
+  }
 
   function isRequired(id: FieldId): boolean { return requiredIds.has(id) }
   function isMissing(id: FieldId): boolean { return isRequired(id) && !isFieldFilled(value, {}, id) }
@@ -48,7 +65,7 @@ export function SmartPatientForm({ drugs, value, onChange }: Props) {
   // เปิด/ปิดแถวอธิบาย "ทำไมต้องกรอก field นี้" (diagnostic — ใช้หา rule ที่ trigger เกินจำเป็น)
   const [showReasons, setShowReasons] = useState(false)
 
-  if (drugs.length === 0 || (required.length === 0 && !rduTriggers.needsContext)) return null
+  if (drugs.length === 0 || (required.length === 0 && !rduTriggers.needsContext && multiIndicationDrugs.length === 0)) return null
 
   // ฟิลด์ตัวเลข (อายุ/น้ำหนัก/SCr/INR/...) — บรรทัดเดียว, fixed width กัน Input default w-full
   const numField = (id: FieldId, ph: string, key: keyof PatientInput, step: string = '0.1', widthCls = 'w-[120px]') => {
@@ -135,6 +152,43 @@ export function SmartPatientForm({ drugs, value, onChange }: Props) {
             )}
           </div>
         )}
+
+        {/* Indication picker — โผล่เฉพาะยาที่มีหลายข้อบ่งใช้ใน LAB_RULES */}
+        {multiIndicationDrugs.map(({ drug, indications }) => {
+          const selected = value.selected_indications?.[drug.icode]
+          return (
+            <div key={drug.icode} className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs text-amber-700 dark:text-amber-300 font-medium shrink-0">
+                📍 {drug.master?.drug_name ?? drug.icode}:
+              </span>
+              {indications.map((ind) => {
+                const active = selected === ind
+                return (
+                  <button
+                    key={ind}
+                    type="button"
+                    onClick={() => setIndication(drug.icode, active ? null : ind)}
+                    className={cn(
+                      'px-2.5 py-1 rounded-full text-xs border transition',
+                      active ? 'bg-amber-500 text-white border-amber-500 font-medium' : 'border-input hover:bg-accent',
+                    )}
+                  >
+                    {active && '✓ '}{ind}
+                  </button>
+                )
+              })}
+              {selected && (
+                <button
+                  type="button"
+                  onClick={() => setIndication(drug.icode, null)}
+                  className="text-[10px] text-muted-foreground underline hover:text-foreground"
+                >
+                  ล้าง
+                </button>
+              )}
+            </div>
+          )
+        })}
 
         {/* RDU context — โผล่เมื่อมียา ATB ในใบสั่ง ให้ติ๊กว่ามาด้วยอาการอะไร */}
         {rduTriggers.needsContext && (

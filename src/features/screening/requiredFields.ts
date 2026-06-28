@@ -1,5 +1,17 @@
 import type { DrugEntry, PatientInput } from '@/types/screening'
+import type { LabRule } from '@/types/drug'
 import { renalBasisOf } from '@/features/renal/calc'
+
+/** กรอง labRules ตาม indication ที่ผู้ใช้เลือก (default rule = no indication → ใช้เสมอ) */
+function filterRulesByIndication(d: DrugEntry, patient: PatientInput): LabRule[] {
+  const rules = d.labRules ?? []
+  const selected = patient.selected_indications?.[d.icode]?.trim()
+  if (!selected) return rules
+  return rules.filter((r) => {
+    const ind = r.indication?.trim()
+    return !ind || ind === selected
+  })
+}
 
 export type FieldId =
   | 'age' | 'sex' | 'weight' | 'height' | 'scr' | 'egfr' | 'inr'
@@ -77,7 +89,7 @@ export interface RequiredField {
 }
 
 /** ตรวจหา fields ที่ต้องการกรอกจากรายการยา */
-export function computeRequiredFields(drugs: DrugEntry[]): RequiredField[] {
+export function computeRequiredFields(drugs: DrugEntry[], patient: PatientInput = {}): RequiredField[] {
   const map = new Map<FieldId, RequiredField>()
   function add(id: FieldId, label: string, unit: string | undefined, reason: string, priority: RequiredField['priority']) {
     const ex = map.get(id)
@@ -113,9 +125,10 @@ export function computeRequiredFields(drugs: DrugEntry[]): RequiredField[] {
     // smoking/alcohol/G6PD/syrup-weight). ใช้เฉพาะ rule ที่ admin set ใน LAB_RULES
     // ตรง ๆ เท่านั้น — ถ้าไม่ตั้งค่า ไม่ต้องถาม
     const topical = isTopicalOrExternal(d)
+    const rules = filterRulesByIndication(d, patient)
     if (topical) {
       // เฉพาะ LAB_RULES param-based เท่านั้น (ข้อ 8 ด้านล่าง)
-      for (const r of d.labRules ?? []) {
+      for (const r of rules) {
         if (!r.param) continue
         const id = paramToFieldId(r.param)
         if (id) {
@@ -128,7 +141,7 @@ export function computeRequiredFields(drugs: DrugEntry[]): RequiredField[] {
     // 1) มี dose_meta → ปรับ dose ตามไต
     //    - rule ที่ใช้ CrCl → ขอ age+weight+sex+scr (คำนวณ Cockcroft-Gault)
     //    - rule ที่ใช้ eGFR → ขอ eGFR ตรง ๆ ไม่ต้องคำนวณ
-    const renalRule = d.labRules?.find((r) => r.dose_meta)
+    const renalRule = rules.find((r) => r.dose_meta)
     if (renalRule && !syrup) {
       if (renalBasisOf(renalRule) === 'egfr') {
         add('egfr', 'eGFR', 'mL/min', `${name} → ปรับ dose ตาม eGFR (กรอกค่าตรง)`, 'high')
@@ -169,13 +182,13 @@ export function computeRequiredFields(drugs: DrugEntry[]): RequiredField[] {
       add('age', 'อายุ', 'ปี', `${name} อยู่ใน Beers (≥65 ปี)`, 'high')
     }
     // 5) Pediatric dose → ขอ "น้ำหนัก" (mg/kg) และ/หรือ "อายุ" (band ตามอายุ)
-    const hasPedWeight = d.labRules?.some((r) =>
+    const hasPedWeight = rules.some((r) =>
       r.pediatric_dose || r.min_dose_kg || r.max_dose_kg || r.dose_by_weight,
     )
     if (hasPedWeight) {
       add('weight', 'น้ำหนัก', 'kg', `${name} → คำนวณขนาดยาเด็กตามน้ำหนัก`, 'high')
     }
-    const hasPedAge = d.labRules?.some((r) => r.dose_by_age_months)
+    const hasPedAge = rules.some((r) => r.dose_by_age_months)
     if (hasPedAge) {
       add('age', 'อายุ', 'ปี (เด็กเล็กกรอกทศนิยม เช่น 0.5 = 6 เดือน)', `${name} → ขนาดยาเด็กตามช่วงอายุ`, 'high')
     }
@@ -195,7 +208,7 @@ export function computeRequiredFields(drugs: DrugEntry[]): RequiredField[] {
       add('g6pd', 'มี G6PD', undefined, `${name} ห้ามในผู้ป่วย G6PD`, 'high')
     }
     // 8) LAB_RULES param specific → ใส่ field ตาม param (เก็บไว้ทั้ง 2 กรณี)
-    for (const r of d.labRules ?? []) {
+    for (const r of rules) {
       if (!r.param) continue
       const id = paramToFieldId(r.param)
       if (id) {
