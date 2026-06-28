@@ -302,8 +302,20 @@ export function buildPediatricAlerts(drugs: DrugEntry[], patient: PatientInput):
       lines.push([rule.pediatric_dose, strength].filter(Boolean).join(' · ') || 'ดูขนาดยาเด็ก')
     }
 
-    // recommendation: prefer band match (most specific)
-    const recommendation = byWeight ?? byAge ?? undefined
+    // recommendation: prefer band match → mg/kg calculated dose → undefined
+    // เน้นใน 💡 "ขนาดที่แนะนำ" — เป็นคำตอบสำเร็จรูปที่เภสัชกรกดอ่านแล้วเข้าใจได้ทันที
+    let recommendation: string | undefined = byWeight ?? byAge ?? undefined
+    if (!recommendation && calc) {
+      const parts: string[] = []
+      const mlRange = [calc.minMlPerDose, calc.maxMlPerDose].filter((x) => x !== undefined).join('–')
+      const mgRange = [calc.minMgPerDose, calc.maxMgPerDose].filter((x) => x !== undefined).join('–')
+      if (mlRange) parts.push(`${mlRange} mL/ครั้ง`)
+      else if (mgRange) parts.push(`${mgRange} mg/ครั้ง`)
+      if (calc.frequency) parts.push(calc.frequency)
+      if (mlRange && mgRange) parts.push(`(= ${mgRange} mg)`)
+      if (calc.maxPerDay !== undefined) parts.push(`ไม่เกิน ${calc.maxPerDay} mg/วัน`)
+      if (parts.length) recommendation = parts.join(' · ')
+    }
 
     const indTag = rule.indication?.trim() ? ` (📍 ${rule.indication.trim()})` : ''
     alerts.push({
