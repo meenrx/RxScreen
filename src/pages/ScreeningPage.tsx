@@ -7,7 +7,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { CollapsibleSection } from '@/components/Collapsible'
 import { SmartPatientForm } from '@/features/screening/SmartPatientForm'
 import { DrugInput } from '@/features/screening/DrugInput'
-import { GroupedAlertList } from '@/features/screening/GroupedAlertList'
+import { DrugResultView } from '@/features/screening/DrugResultView'
 import { AISummaryPanel } from '@/features/screening/AISummaryPanel'
 import { AllergyRiskPanel } from '@/features/screening/AllergyRiskPanel'
 import { Sticker57Panel } from '@/features/screening/Sticker57'
@@ -28,6 +28,7 @@ import { useAuthStore } from '@/features/auth/authStore'
 import { getConfig, getDrugByIcode, listLabRulesForDrug } from '@/features/catalog/api'
 import { toast } from 'sonner'
 import type { DrugEntry } from '@/types/screening'
+import type { LabRule } from '@/types/drug'
 
 export default function ScreeningPage() {
   const patient = useScreeningStore((s) => s.patient)
@@ -97,27 +98,72 @@ export default function ScreeningPage() {
   }
 
   const onQrScan = useCallback(async (data: ScannedData) => {
-    const newDrugs: DrugEntry[] = []
-    const notFound: string[] = []
+    // 1) จับคู่ icode จากรายการ in-memory ก่อน (ทันที ไม่ต้องยิง Firestore)
+    const byIcode = new Map(drugMasters.map((m) => [m.icode.toLowerCase(), m]))
+    const inMemory: DrugEntry[] = []
+    const needFetch: { icode: string; sig?: string }[] = []
     for (const d of data.drugs) {
-      const master = drugMasters.find((m) => m.icode.toLowerCase() === d.icode.toLowerCase())
-        ?? await getDrugByIcode(d.icode).catch(() => null)
-      if (!master) { notFound.push(d.icode); continue }
-      const rules = await listLabRulesForDrug(master).catch(() => [])
-      newDrugs.push({ icode: master.icode, drug_name: master.drug_name, sig: d.sig, master, labRules: rules })
+      const master = byIcode.get(d.icode.toLowerCase())
+      if (master) inMemory.push({ icode: master.icode, drug_name: master.drug_name, sig: d.sig, master, labRules: [] })
+      else needFetch.push({ icode: d.icode, sig: d.sig })
     }
+
+    // 2) ใส่ยา (ที่จับคู่ได้ทันที) + ข้อมูลคนไข้เข้า store เดี๋ยวนั้น → chips + ฟอร์มโผล่เลย
     const cur = useScreeningStore.getState()
-    setDrugs([...cur.drugs, ...newDrugs])
+    if (inMemory.length > 0) setDrugs([...cur.drugs, ...inMemory])
     setPatient({
       ...cur.patient,
       hn: data.hn ?? cur.patient.hn,
       patient_name: data.patient_name ?? cur.patient.patient_name,
       age: data.age ?? cur.patient.age,
       sex: data.sex ?? cur.patient.sex,
+      weight: data.weight ?? cur.patient.weight,
+      egfr: data.egfr ?? cur.patient.egfr,
+      scr: data.scr ?? cur.patient.scr,
+      g6pd: data.g6pd ?? cur.patient.g6pd,
+      is_pregnant: data.is_pregnant ?? cur.patient.is_pregnant,
+      allergies: data.allergies ?? cur.patient.allergies,
     })
-    if (newDrugs.length > 0) toast.success(`สแกนได้ ${newDrugs.length} รายการยา`)
+    if (data.labs && Object.keys(data.labs).length > 0) {
+      setLabValues((prev) => ({ ...prev, ...data.labs }))
+    }
+    if (inMemory.length > 0) {
+      toast.success(`สแกนได้ ${inMemory.length} รายการยา${data.dx ? ` · Dx: ${data.dx}` : ''}`)
+    }
+
+    // 3) เบื้องหลัง (ขนานทั้งหมด): โหลด labRules ของยาที่ add แล้ว + หา master ของยาที่ยังไม่เจอใน memory
+    const [rulesForInMem, fetched] = await Promise.all([
+      Promise.all(inMemory.map((e) => listLabRulesForDrug(e.master!).catch(() => []))),
+      Promise.all(needFetch.map(async (d): Promise<{ entry?: DrugEntry; notFound?: string }> => {
+        const master = await getDrugByIcode(d.icode).catch(() => null)
+        if (!master) return { notFound: d.icode }
+        const labRules = await listLabRulesForDrug(master).catch(() => [])
+        return { entry: { icode: master.icode, drug_name: master.drug_name, sig: d.sig, master, labRules } }
+      })),
+    ])
+
+    // patch labRules เข้า entry เดิม (อ้างอิงด้วย object reference) + เพิ่มยาที่เพิ่งหาเจอจาก Firestore
+    const rulesByEntry = new Map<DrugEntry, LabRule[]>(inMemory.map((e, i) => [e, rulesForInMem[i]]))
+    const fetchedEntries: DrugEntry[] = []
+    const notFound: string[] = []
+    for (const f of fetched) {
+      if (f.entry) fetchedEntries.push(f.entry)
+      else if (f.notFound) notFound.push(f.notFound)
+    }
+    const after = useScreeningStore.getState().drugs
+    const patched = after.map((d) => {
+      const rules = rulesByEntry.get(d)
+      return rules ? { ...d, labRules: rules } : d
+    })
+    setDrugs([...patched, ...fetchedEntries])
+
+    if (fetchedEntries.length > 0) toast.success(`เพิ่มอีก ${fetchedEntries.length} รายการยา`)
     if (notFound.length > 0) toast.warning(`ไม่พบ icode: ${notFound.join(', ')}`)
-  }, [drugMasters, setDrugs, setPatient])
+    // อ่าน QR ได้ แต่ไม่มีทั้งยาที่เพิ่มและ icode ที่ไม่พบ → อย่าเงียบ
+    if (inMemory.length === 0 && fetchedEntries.length === 0 && notFound.length === 0) {
+      toast.warning('อ่าน QR ได้ แต่ไม่พบรายการยาในข้อมูล — ตรวจรูปแบบ QR หรือใช้ช่อง "วาง/พิมพ์"')
+    }
+  }, [drugMasters, setDrugs, setPatient, setLabValues])
 
   async function saveLog() {
     if (!user) return
@@ -213,7 +259,7 @@ export default function ScreeningPage() {
               {/* รายละเอียดผลคัดกรอง — แสดงเลย ไม่มีสรุปซ้ำซ้อน */}
               <AllergyRiskPanel drugs={drugs} />
               <SubstitutionScreenPanel drugs={drugs} />
-              <GroupedAlertList alerts={alerts} />
+              <DrugResultView drugs={drugs} alerts={alerts} />
 
               {/* ส่วนรอง — จัด 2 คอลัมน์บนจอกว้าง ใช้พื้นที่คุ้ม (มือถือเรียงเดี่ยว) */}
               <div className="grid lg:grid-cols-2 gap-3 items-start">

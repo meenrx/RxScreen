@@ -11,6 +11,17 @@ export interface ScannedData {
   patient_name?: string
   age?: number
   sex?: 'M' | 'F'
+  weight?: number
+  /** CrCl/eGFR (mL/min) กรอกตรงจากฉลาก */
+  egfr?: number
+  scr?: number
+  g6pd?: boolean
+  is_pregnant?: boolean
+  allergies?: string[]
+  /** วินิจฉัย ICD-10 ดิบจากฉลาก (เช่น A090) — แสดงให้เภสัชกรเห็น ยังไม่ auto-map เป็น disease */
+  dx?: string
+  /** ค่าแลบอื่น ๆ ที่ติดมากับฉลาก (key = param เช่น k/ast/alt) */
+  labs?: Record<string, number>
   drugs: { icode: string; sig?: string; drug_name?: string }[]
 }
 
@@ -18,6 +29,14 @@ interface Props {
   open: boolean
   onOpenChange: (v: boolean) => void
   onScan: (data: ScannedData) => void
+}
+
+// กล้องหลัง + ความละเอียดสูง + โฟกัสต่อเนื่อง → อ่าน QR แน่น ๆ (147 ตัว) บนมือถือได้ไวและแม่นขึ้น
+const SCAN_CONSTRAINTS: MediaTrackConstraints = {
+  facingMode: 'environment',
+  width: { ideal: 1920 },
+  height: { ideal: 1080 },
+  advanced: [{ focusMode: 'continuous' }] as unknown as MediaTrackConstraintSet[],
 }
 
 export function QrScannerModal({ open, onOpenChange, onScan }: Props) {
@@ -37,6 +56,12 @@ export function QrScannerModal({ open, onOpenChange, onScan }: Props) {
   function addPayload(raw: string): boolean {
     if (seen.has(raw)) return false // สแกนซ้ำสติ๊กเกอร์เดิม → ข้าม
     const data = parseQrPayload(raw)
+    // อ่าน QR ได้ แต่ parse ไม่เจอยา → อย่าเงียบ: โชว์ข้อความดิบให้เห็นว่ารูปแบบ QR เป็นยังไง
+    if (data.drugs.length === 0) {
+      setSeen((p) => new Set(p).add(raw))
+      setError(`อ่าน QR ได้ แต่ไม่พบรายการยาในรูปแบบที่รองรับ — ข้อความที่อ่านได้: ${raw.slice(0, 160)}`)
+      return false
+    }
     onScan(data)
     setSeen((p) => new Set(p).add(raw))
     const n = data.drugs.length
@@ -48,8 +73,10 @@ export function QrScannerModal({ open, onOpenChange, onScan }: Props) {
   function handleScan(codes: IDetectedBarcode[]) {
     if (!codes || codes.length === 0) return
     try {
-      addPayload(codes[0].rawValue)
+      const added = addPayload(codes[0].rawValue)
       setError(null)
+      // สแกนติด + ได้ยาแล้ว → ปิด modal ทันที เด้งไปหน้าผลคัดกรอง (ฉลาก 1 ดวง = ทั้งใบสั่ง)
+      if (added) onOpenChange(false)
     } catch (e) {
       setError((e as Error).message)
     }
@@ -58,9 +85,10 @@ export function QrScannerModal({ open, onOpenChange, onScan }: Props) {
   function handleManual() {
     if (!manualText.trim()) return
     try {
-      addPayload(manualText.trim())
+      const added = addPayload(manualText.trim())
       setManualText('')
       setError(null)
+      if (added) onOpenChange(false)
     } catch (e) {
       setError((e as Error).message)
     }
@@ -85,8 +113,12 @@ export function QrScannerModal({ open, onOpenChange, onScan }: Props) {
             <div className="relative aspect-square bg-black">
               <Scanner
                 onScan={handleScan}
-                onError={(e) => setError(String(e))}
-                constraints={{ facingMode: 'environment' }}
+                onError={(e) => setError(e?.message ? String(e.message) : String(e))}
+                formats={['qr_code']}
+                constraints={SCAN_CONSTRAINTS}
+                scanDelay={100}
+                retryDelay={80}
+                sound
                 styles={{ container: { width: '100%', height: '100%' } }}
               />
               <div className="absolute inset-8 border-4 border-emerald-400/80 rounded-2xl pointer-events-none animate-pulse" />
@@ -179,6 +211,13 @@ export function parseQrPayload(raw: string): ScannedData {
   // Pipe-delimited
   if (text.includes('|')) {
     const parts = text.split('|')
+
+    // รูปแบบฉลาก รพ. (prefix-tagged) — ตรวจจากการมี segment ขึ้นต้น "RX:"
+    //   AN580007583|RX:1000011,1000054|A59|SF|BW61|CrCl80|SCr0.73|K4.59|AST42|ALT67|G6PD-|Alg:-|Dx:A090|PgN
+    if (parts.some((p) => /^\s*RX:/i.test(p))) {
+      return parseHospitalSticker(parts)
+    }
+
     const head = parts[0].toUpperCase().trim()
     let i = 0
     if (head === 'RXS') i = 1
@@ -206,4 +245,63 @@ export function parseQrPayload(raw: string): ScannedData {
   })
   if (drugs.length === 0) throw new Error('ไม่พบรายการยาในข้อมูล')
   return { drugs }
+}
+
+/**
+ * Parse ฉลากยา รพ. — pipe-delimited แบบติด prefix (อ่านตาม tag ไม่ยึดตำแหน่ง):
+ *   AN580007583 | RX:icode,icode | A59 | SF | BW61 | CrCl80 | SCr0.73 |
+ *   K4.59 | AST42 | ALT67 | G6PD- | Alg:- | Dx:A090 | PgN
+ *
+ * - RX:   → รายการ icode ยา (คั่นด้วย comma)
+ * - AN../HN.. → เลขผู้ป่วย   A59 → อายุ   SF/SM → เพศ   BW61 → น้ำหนัก
+ * - CrCl → eGFR   SCr → serum Cr   G6PD-/+ → G6PD   Alg: → แพ้ยา ("-" = ไม่มี)
+ * - Dx:  → ICD-10   Pg N/Y → ตั้งครรภ์   token อื่น เช่น K/AST/ALT → เก็บเป็น lab
+ */
+function parseHospitalSticker(parts: string[]): ScannedData {
+  const out: ScannedData = { drugs: [], labs: {} }
+  const num = (s: string) => {
+    const n = Number(s.replace(/[^\d.]/g, ''))
+    return Number.isFinite(n) ? n : undefined
+  }
+
+  for (const raw of parts) {
+    const seg = raw.trim()
+    if (!seg) continue
+    const up = seg.toUpperCase()
+
+    if (up.startsWith('RX:')) {
+      out.drugs = seg.slice(3).split(/[,\s]+/).map((s) => s.trim()).filter(Boolean).map((icode) => ({ icode }))
+    } else if (up.startsWith('ALG:')) {
+      const rest = seg.slice(4).trim()
+      out.allergies = rest && rest !== '-' ? rest.split(/[,;]+/).map((s) => s.trim()).filter(Boolean) : []
+    } else if (up.startsWith('DX:')) {
+      out.dx = seg.slice(3).trim() || undefined
+    } else if (/^(AN|HN)[\w-]+$/i.test(seg)) {
+      out.hn = seg
+    } else if (/^A\d+$/i.test(seg)) {
+      out.age = num(seg)
+    } else if (/^S[MF]$/i.test(seg)) {
+      out.sex = up[1] as 'M' | 'F'
+    } else if (/^BW[\d.]+$/i.test(seg)) {
+      out.weight = num(seg)
+    } else if (up.startsWith('CRCL')) {
+      out.egfr = num(seg)
+    } else if (up.startsWith('SCR')) {
+      out.scr = num(seg)
+      if (out.scr !== undefined) out.labs!.scr = out.scr
+    } else if (up.startsWith('G6PD')) {
+      const v = seg.slice(4).trim().toLowerCase()
+      if (['+', 'def', 'pos', 'positive', 'y', 'yes'].includes(v)) out.g6pd = true
+      else if (['-', 'neg', 'normal', 'n', 'no'].includes(v)) out.g6pd = false
+    } else if (up.startsWith('PG')) {
+      const v = seg.slice(2).trim().toLowerCase()
+      if (['y', 'yes', '+'].includes(v)) out.is_pregnant = true
+      else if (['n', 'no', '-'].includes(v)) out.is_pregnant = false
+    } else {
+      // lab ทั่วไป เช่น K4.59, AST42, ALT67, NA140
+      const m = seg.match(/^([A-Za-z][A-Za-z0-9]*?)([\d.]+)$/)
+      if (m) out.labs![m[1].toLowerCase()] = Number(m[2])
+    }
+  }
+  return out
 }
