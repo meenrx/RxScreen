@@ -9,13 +9,35 @@ import { getCounselingByIcode } from '@/features/catalog/api'
 import { formatBE } from '@/lib/format'
 import { useAuthStore } from '@/features/auth/authStore'
 import { printHtml, escapeHtml as esc } from './printService'
-import type { DrugCounseling } from '@/types/drug'
+import type { DrugCounseling, DrugMaster } from '@/types/drug'
 import type { DrugEntry, PatientInput } from '@/types/screening'
 
 interface Props {
   drugs: DrugEntry[]
   patient: PatientInput
   hospitalName?: string
+}
+
+/** เก็บรักษาอัตโนมัติจากรูปแบบยา — ใช้เมื่อไม่ได้ตั้งค่า counseling.storage */
+function autoStorage(m?: DrugMaster, generic?: string): string | undefined {
+  const f = (m?.dosage_form ?? m?.form ?? '').toLowerCase()
+  const g = (generic ?? m?.generic_name ?? '').toLowerCase()
+  if (g.includes('insulin')) return 'แช่ตู้เย็น · ขวดที่ใช้แล้วเก็บอุณหภูมิห้องได้ 28 วัน'
+  if (/syrup|suspension|ยาน้ำ/.test(f)) return 'เก็บพ้นแสง · บางชนิดแช่เย็น · ทิ้งหลังเปิด 1 เดือน'
+  if (/drop/.test(f)) return 'เก็บพ้นแสง · ทิ้งหลังเปิด 1 เดือน'
+  if (/suppository|supp/.test(f)) return 'เก็บในตู้เย็น'
+  return undefined
+}
+
+/** คำเตือนอัตโนมัติจาก safety flag — ใช้เมื่อไม่ได้ตั้งค่า counseling.warning */
+function autoWarning(m?: DrugMaster): string | undefined {
+  const w: string[] = []
+  if (m?.no_crush) w.push('ห้ามบด/เคี้ยว/หักเม็ด')
+  if (m?.is_HAD) w.push('ยาความเสี่ยงสูง')
+  if (m?.g6pd_unsafe) w.push('ระวังผู้ป่วย G6PD')
+  if (m?.pregnancy_category === 'X') w.push('ห้ามใช้ขณะตั้งครรภ์')
+  if (m?.lactation_safe === false) w.push('ห้ามให้นมบุตร')
+  return w.length ? w.join(' · ') : undefined
 }
 
 /** สติ๊กเกอร์คำแนะนำ 5×7 cm (แนวนอน → page 7×5 cm) */
@@ -117,9 +139,10 @@ function PreviewSticker({ drug, counseling, patient, user, hospitalName }: { dru
       </div>
       <div className="font-bold leading-tight mt-1" style={{ fontSize: '11pt' }}>{drug.master?.drug_name ?? drug.drug_name}</div>
       {drug.master?.generic_name && <div className="text-slate-600 leading-tight" style={{ fontSize: '7pt' }}>({drug.master.generic_name})</div>}
-      {counseling?.short_label && <div className="font-semibold mt-1 leading-tight">💊 {counseling.short_label}</div>}
-      {counseling?.warning && <div className="font-bold text-red-700 leading-tight" style={{ fontSize: '7pt' }}>⚠ {counseling.warning}</div>}
-      {counseling?.storage && <div className="text-slate-700 leading-tight" style={{ fontSize: '7pt' }}>📦 {counseling.storage}</div>}
+      {drug.sig && <div className="font-semibold mt-1 leading-tight">💊 วิธีใช้: {drug.sig}</div>}
+      {counseling?.short_label && <div className="leading-tight" style={{ fontSize: '7.5pt' }}>📝 {counseling.short_label}</div>}
+      {(() => { const warn = counseling?.warning ?? autoWarning(drug.master); return warn && <div className="font-bold text-red-700 leading-tight" style={{ fontSize: '7pt' }}>⚠ {warn}</div> })()}
+      {(() => { const store = counseling?.storage ?? autoStorage(drug.master); return store && <div className="text-slate-700 leading-tight" style={{ fontSize: '7pt' }}>📦 {store}</div> })()}
       <div className="flex justify-between border-t border-slate-400 mt-1 pt-0.5" style={{ fontSize: '7pt' }}>
         <span className="truncate">ภก. {user?.displayName ?? ''}</span>
         <span>ลข. {user?.licNumber ?? ''}</span>
@@ -170,9 +193,10 @@ function renderStickersHtml({ drugs, counselingMap, patient, user, hospitalName 
       </div>
       <div class="drug">${esc(d.master?.drug_name ?? d.drug_name)}</div>
       ${d.master?.generic_name ? `<div class="gen">(${esc(d.master.generic_name)})</div>` : ''}
-      ${c?.short_label ? `<div class="label">💊 ${esc(c.short_label)}</div>` : ''}
-      ${c?.warning ? `<div class="warn">⚠ ${esc(c.warning)}</div>` : ''}
-      ${c?.storage ? `<div class="store">📦 ${esc(c.storage)}</div>` : ''}
+      ${d.sig ? `<div class="label">💊 วิธีใช้: ${esc(d.sig)}</div>` : ''}
+      ${c?.short_label ? `<div class="store">📝 ${esc(c.short_label)}</div>` : ''}
+      ${(() => { const warn = c?.warning ?? autoWarning(d.master); return warn ? `<div class="warn">⚠ ${esc(warn)}</div>` : '' })()}
+      ${(() => { const store = c?.storage ?? autoStorage(d.master); return store ? `<div class="store">📦 ${esc(store)}</div>` : '' })()}
       <div class="ft">
         <span>ภก. ${esc(user?.displayName ?? '')}</span>
         <span>ลข. ${esc(user?.licNumber ?? '')}</span>

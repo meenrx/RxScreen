@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, ClipboardCheck, History,
-  Settings, Database, Sparkles, BookOpen, UserSearch, HelpCircle, Pill, Wrench,
+  Settings, Database, BookOpen, UserSearch, HelpCircle, Pill, Wrench,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/features/auth/authStore'
@@ -51,15 +51,7 @@ export function Sidebar({ onNavigate }: Props) {
           </>
         )}
       </nav>
-      <div className="mx-3 mt-2 mb-1 rounded-xl bg-gradient-to-br from-violet-50 to-cyan-50 dark:from-violet-950/40 dark:to-cyan-950/40 border border-violet-100 dark:border-violet-900 p-3">
-        <div className="flex items-center gap-2 text-violet-700 dark:text-violet-300 text-xs font-semibold">
-          <Sparkles className="size-3.5" /> AI Summary
-        </div>
-        <p className="text-[11px] text-muted-foreground mt-1 leading-snug">
-          กด "สรุปด้วย AI" หลังคัดกรองเพื่อให้ Claude Haiku สรุปประเด็น
-        </p>
-      </div>
-      <div className="px-4 pt-2 text-[10px] text-muted-foreground">v0.3.0 · RxScreen</div>
+      <div className="px-4 pt-3 text-[10px] text-muted-foreground">v0.3.0 · RxScreen</div>
     </div>
   )
 }

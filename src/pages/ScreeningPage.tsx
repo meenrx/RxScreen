@@ -30,6 +30,9 @@ import { toast } from 'sonner'
 import type { DrugEntry, ScreeningAlert } from '@/types/screening'
 import type { LabRule } from '@/types/drug'
 
+/** สรุปด้วย AI — ปิดชั่วคราว (ตั้ง true เพื่อเปิดกลับ) */
+const SHOW_AI = false
+
 /** สรุป alert แยกระดับ + ชนิด (dedupe) สำหรับบันทึกลง log → ใช้ทำรายงาน dashboard */
 function alertSummary(alerts: ScreeningAlert[]) {
   return {
@@ -141,6 +144,7 @@ export default function ScreeningPage() {
       weight: data.weight ?? cur.patient.weight,
       scr: data.scr ?? cur.patient.scr,
       egfr: data.crcl ?? cur.patient.egfr,
+      inr: data.inr ?? cur.patient.inr,
       labs,
       g6pd: data.g6pd ?? cur.patient.g6pd,
       g6pd_tested: data.g6pd_tested ?? cur.patient.g6pd_tested,
@@ -290,14 +294,17 @@ export default function ScreeningPage() {
 
               {/* ส่วนรอง — จัด 2 คอลัมน์บนจอกว้าง ใช้พื้นที่คุ้ม (มือถือเรียงเดี่ยว) */}
               <div className="grid lg:grid-cols-2 gap-3 items-start">
-                <CollapsibleSection
-                  title="สรุปด้วย AI (Claude Haiku)"
-                  subtitle={aiText ? '✓ สรุปเรียบร้อย' : 'กดปุ่ม "สรุปด้วย AI" เพื่อให้ Claude วิเคราะห์'}
-                  icon={<div className="size-8 rounded-lg bg-violet-100 dark:bg-violet-950/40 text-violet-600 grid place-items-center"><Sparkles className="size-4" /></div>}
-                  defaultOpen={!!aiText}
-                >
-                  <AISummaryPanel patient={patient} drugs={drugs} alerts={alerts} onResult={setAiText} />
-                </CollapsibleSection>
+                {/* สรุปด้วย AI — ซ่อนไว้ก่อน (เปลี่ยน SHOW_AI เป็น true เพื่อเปิดกลับ) */}
+                {SHOW_AI && (
+                  <CollapsibleSection
+                    title="สรุปด้วย AI (Claude Haiku)"
+                    subtitle={aiText ? '✓ สรุปเรียบร้อย' : 'กดปุ่ม "สรุปด้วย AI" เพื่อให้ Claude วิเคราะห์'}
+                    icon={<div className="size-8 rounded-lg bg-violet-100 dark:bg-violet-950/40 text-violet-600 grid place-items-center"><Sparkles className="size-4" /></div>}
+                    defaultOpen={!!aiText}
+                  >
+                    <AISummaryPanel patient={patient} drugs={drugs} alerts={alerts} onResult={setAiText} />
+                  </CollapsibleSection>
+                )}
 
                 <CollapsibleSection
                   title="Counseling Checklist"

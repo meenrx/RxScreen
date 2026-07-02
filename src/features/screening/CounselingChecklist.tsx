@@ -71,9 +71,6 @@ function buildSmartChecklist(master?: DrugMaster, c?: DrugCounseling | null): st
   if (c?.special_pop) items.push(`👥 กลุ่มพิเศษ: ${c.special_pop}`)
   if (c?.warning && c.warning !== c.when_to_er) items.push(`⚠️ ${c.warning}`)
 
-  // ตรวจสอบความเข้าใจ — ใส่ตอนท้ายเสมอ
-  items.push('✓ ตรวจสอบความเข้าใจของผู้ป่วย')
-
   return items
 }
 
@@ -117,13 +114,28 @@ export function CounselingChecklist({ drugs, onChange }: Props) {
       <CardContent className="space-y-4">
         {drugs.map((d) => {
           const c = counselingMap[d.icode]
-          const items: string[] = buildSmartChecklist(d.master, c)
+          const special: string[] = buildSmartChecklist(d.master, c)
+          // ยาที่ไม่ได้ตั้งค่า counseling พิเศษ + ไม่มี flag สำคัญ → แนะนำตามปกติ
+          if (special.length === 0) {
+            return (
+              <div key={d.icode} className="border rounded-xl p-3">
+                <div className="font-medium mb-1">{d.master?.drug_name ?? d.drug_name}</div>
+                <div className="text-sm text-muted-foreground flex items-center gap-2">
+                  <span className="text-emerald-600">💊</span>
+                  ให้คำแนะนำการใช้ยาตามปกติ (ชื่อยา · วิธีใช้ · การเก็บรักษา)
+                </div>
+              </div>
+            )
+          }
+          // มี counseling พิเศษ → checklist + ปิดท้ายด้วย "ตรวจสอบความเข้าใจ"
+          const items = [...special, '✓ ตรวจสอบความเข้าใจของผู้ป่วย']
           const ck = checked[d.icode] ?? []
           const allDone = ck.length === items.length
           return (
             <div key={d.icode} className="border rounded-xl p-3">
               <div className="font-medium mb-2 flex items-center gap-2">
                 {d.master?.drug_name ?? d.drug_name}
+                <span className="text-[10px] font-normal px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">counseling พิเศษ</span>
                 {allDone && <span className="text-emerald-600 text-sm">✓ ครบ</span>}
               </div>
               <div className="grid sm:grid-cols-2 gap-1.5">

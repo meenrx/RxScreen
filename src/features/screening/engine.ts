@@ -485,10 +485,36 @@ export function buildDrpAlerts(drugs: DrugEntry[], noDupClasses?: string[]): Scr
 }
 
 // ============ Allergy + cross-reactivity ============
+/** ตารางแพ้ข้ามกลุ่มมาตรฐาน (built-in) — ทำงานโดยไม่ต้องกรอก cross_react รายตัว
+ *  ถ้าผู้ป่วยแพ้ allergen ในกลุ่ม → ยาที่ class/generic เข้า crossKeys จะถูกเตือน cross-reactivity */
+const CROSS_ALLERGY_GROUPS: { allergens: string[]; crossKeys: string[]; note: string }[] = [
+  {
+    allergens: ['penicillin', 'penicillins', 'ampicillin', 'amoxicillin', 'augmentin', 'cloxacillin', 'dicloxacillin', 'piperacillin', 'เพนนิซิลลิน', 'เพนิซิลลิน'],
+    crossKeys: ['cephalosporin', 'cephalosporins', 'cefazolin', 'cefaz', 'cephalexin', 'cefalexin', 'cefdinir', 'cefixime', 'cefotaxime', 'ceftazidime', 'ceftriaxone', 'cefuroxime', 'cefepime', 'carbapenem', 'imipenem', 'meropenem', 'ertapenem', 'penicillin'],
+    note: 'Beta-lactam cross-reactivity (penicillin ↔ cephalosporin ~1–3%, carbapenem)',
+  },
+  {
+    allergens: ['sulfa', 'sulfonamide', 'sulfonamides', 'bactrim', 'co-trimoxazole', 'cotrimoxazole', 'sulfamethoxazole', 'ซัลฟา'],
+    crossKeys: ['sulfamethoxazole', 'sulfasalazine', 'sulfadiazine', 'co-trimoxazole', 'cotrimoxazole', 'bactrim', 'sulfonamide'],
+    note: 'Sulfonamide cross-reactivity (antibacterial sulfonamides)',
+  },
+  {
+    allergens: ['aspirin', 'asa', 'nsaid', 'nsaids', 'ibuprofen', 'diclofenac', 'แอสไพริน'],
+    crossKeys: ['nsaid', 'nsaids', 'ibuprofen', 'diclofenac', 'naproxen', 'mefenamic', 'meloxicam', 'piroxicam', 'ketorolac', 'indomethacin', 'celecoxib', 'aspirin'],
+    note: 'ASA/NSAID cross-reactivity (COX inhibition — เสี่ยง bronchospasm/urticaria)',
+  },
+  {
+    allergens: ['codeine', 'morphine', 'opioid', 'tramadol'],
+    crossKeys: ['opioid', 'opioids', 'morphine', 'codeine', 'tramadol', 'fentanyl', 'pethidine', 'oxycodone'],
+    note: 'Opioid cross-sensitivity (แพ้จริงพบน้อย — มักเป็น pseudoallergy)',
+  },
+]
+
 export function buildAllergyAlerts(drugs: DrugEntry[], allergies: string[] | undefined): ScreeningAlert[] {
   if (!allergies || allergies.length === 0) return []
   const alerts: ScreeningAlert[] = []
-  const allergiesLower = allergies.map((a) => a.toLowerCase().trim())
+  const flagged = new Set<string>()  // icode ที่เตือนแล้ว (กันซ้ำระหว่าง 2 ชั้น)
+  const allergiesLower = allergies.map((a) => a.toLowerCase().trim()).filter(Boolean)
   for (const d of drugs) {
     const m = d.master
     if (!m) continue
@@ -506,6 +532,7 @@ export function buildAllergyAlerts(drugs: DrugEntry[], allergies: string[] | und
       const directMatch = drugTags.slice(0, (m.allergens ?? []).length).some((t) => t.includes(hit))
         || (m.generic_name && m.generic_name.toLowerCase().includes(hit))
         || (m.drug_name && m.drug_name.toLowerCase().includes(hit))
+      flagged.add(d.icode)
       alerts.push({
         id: `allergy_${d.icode}_${hit}`,
         type: 'ALLERGY',
@@ -516,6 +543,33 @@ export function buildAllergyAlerts(drugs: DrugEntry[], allergies: string[] | und
         drugs: [d.icode],
         source: m,
       })
+    }
+  }
+
+  // ชั้นที่ 2 — แพ้ข้ามกลุ่มมาตรฐาน (built-in) สำหรับยาที่ยังไม่ถูกเตือน
+  for (const d of drugs) {
+    const m = d.master
+    if (!m || flagged.has(d.icode)) continue
+    const hay = [m.generic_name, m.drug_class, m.drug_category, m.drug_name]
+      .filter(Boolean).map((s) => (s as string).toLowerCase()).join(' | ')
+    for (const grp of CROSS_ALLERGY_GROUPS) {
+      const patientAllergic = allergiesLower.some((al) => grp.allergens.some((a) => al.includes(a) || a.includes(al)))
+      if (!patientAllergic) continue
+      const drugInGroup = grp.crossKeys.some((k) => hay.includes(k))
+      if (!drugInGroup) continue
+      const allergenLabel = allergiesLower.find((al) => grp.allergens.some((a) => al.includes(a) || a.includes(al))) ?? ''
+      flagged.add(d.icode)
+      alerts.push({
+        id: `allergy_cross_${d.icode}`,
+        type: 'ALLERGY',
+        severity: 'orange',
+        title: `⚠️ แพ้ข้ามกลุ่ม: ผู้ป่วยแพ้ "${allergenLabel}" → ${m.drug_name}`,
+        detail: grp.note,
+        recommendation: 'ประเมินความเสี่ยง cross-reactivity ก่อนจ่าย — ถ้าประวัติแพ้รุนแรง (anaphylaxis) ให้หลีกเลี่ยง',
+        drugs: [d.icode],
+        source: m,
+      })
+      break
     }
   }
   return alerts

@@ -19,8 +19,12 @@ export interface ScannedData {
   crcl?: number
   /** serum creatinine (mg/dL) */
   scr?: number
-  /** ค่าแล็บอื่น ๆ keyed lowercase: k, ast, alt, ... */
+  /** INR */
+  inr?: number
+  /** ค่าแล็บอื่น ๆ keyed lowercase: k, ast, alt, fbs, bun, mg, albumin, plt, anc, aec, ... */
   labs?: Record<string, number>
+  /** วันที่ของค่าแล็บ (YYMMDD) keyed เหมือน labs — ไว้แสดงว่าเป็นค่าล่าสุดแค่ไหน */
+  labDates?: Record<string, string>
   /** true=พร่อง, false=ปกติ, undefined=ยังไม่เจาะ */
   g6pd?: boolean
   g6pd_tested?: boolean
@@ -242,11 +246,72 @@ function parseIpdFields(text: string): ScannedData {
   return out
 }
 
+/** แยกค่าแล็บที่อาจมี @วันที่ เช่น "4.35@260413" → { n:4.35, date:"260413" } */
+function labVal(v: string): { n?: number; date?: string } {
+  const [valPart, datePart] = v.split('@')
+  return { n: num(valPart), date: datePart || undefined }
+}
+
+/**
+ * parse QR v2 (key สั้น, ตัด field ว่าง, lab = ค่า@YYMMDD, จับด้วย prefix ไม่ใช่ตำแหน่ง)
+ * N=AN R:=ยา A=อายุ S=เพศ W=นน. G=FBS Y:=แพ้ P1=ตั้งครรภ์ C=CrCl Cr=SCr B=BUN
+ * K=K M=Mg 6=G6PD O=AST L=ALT Ab=Albumin I=INR T=Plt Nc=ANC Ec=AEC D:=ICD10
+ */
+function parseV2Fields(text: string): ScannedData {
+  // เรียง key ยาว/เฉพาะเจาะจงก่อน กัน Cr↔C, Nc↔N, Ab↔A ชนกัน
+  const KEYS = ['Nc', 'Ec', 'Ab', 'Cr', 'P1', 'R:', 'Y:', 'D:', 'N', 'C', 'A', 'S', 'W', 'G', 'B', 'K', 'M', '6', 'O', 'L', 'I', 'T']
+  const out: ScannedData = { drugs: [], labs: {}, labDates: {} }
+  const setLab = (key: string, raw: string) => {
+    const { n, date } = labVal(raw)
+    if (n !== undefined) { out.labs![key] = n; if (date) out.labDates![key] = date }
+  }
+  for (const seg of text.split('|')) {
+    const s = seg.trim()
+    if (!s) continue
+    const key = KEYS.find((k) => s.startsWith(k))
+    if (!key) continue
+    const bare = key.replace(':', '')
+    const val = s.slice(bare.length).replace(/^:/, '').trim()
+    switch (bare) {
+      case 'N': out.an = val || undefined; out.hn = val || undefined; break
+      case 'R': out.drugs = val.split(',').map((x) => x.trim()).filter(Boolean).map((icode) => ({ icode })); break
+      case 'A': out.age = num(val); break
+      case 'S': out.sex = val === 'M' || val === 'F' ? val : undefined; break
+      case 'W': out.weight = num(val); break
+      case 'C': { const { n, date } = labVal(val); out.crcl = n; if (date) out.labDates!.crcl = date; break }
+      case 'Cr': out.scr = labVal(val).n; break
+      case 'G': setLab('fbs', val); break
+      case 'B': setLab('bun', val); break
+      case 'K': setLab('k', val); break
+      case 'M': setLab('mg', val); break
+      case 'O': setLab('ast', val); break
+      case 'L': setLab('alt', val); break
+      case 'Ab': setLab('albumin', val); break
+      case 'I': out.inr = labVal(val).n; break
+      case 'T': setLab('plt', val); break
+      case 'Nc': setLab('anc', val); break
+      case 'Ec': setLab('aec', val); break
+      case '6': out.g6pd_tested = true; out.g6pd = /def|พร่อง|deficien/i.test(val); break
+      case 'Y': out.allergies = val ? val.split(',').map((x) => x.trim()).filter(Boolean) : undefined; break
+      case 'D': out.diseases = val ? val.split(',').map((x) => x.trim()).filter(Boolean) : undefined; break
+      case 'P1': out.is_pregnant = true; break // มี key = ตั้งครรภ์
+    }
+  }
+  if (out.labs && Object.keys(out.labs).length === 0) delete out.labs
+  if (out.labDates && Object.keys(out.labDates).length === 0) delete out.labDates
+  return out
+}
+
 export function parseQrPayload(raw: string): ScannedData {
   const text = raw.trim()
   if (!text) throw new Error('ข้อมูล QR ว่าง')
 
-  // IPD 14-field — ตรวจก่อน pipe ทั่วไป (มี key เฉพาะอย่าง RX:/CrCl/Dx:/AN)
+  // v2 (key สั้น) — ตรวจก่อน: มี segment ขึ้นต้น "R:" (รายการยา)
+  if (/(^|\|)R:/.test(text)) {
+    return parseV2Fields(text)
+  }
+
+  // IPD 14-field เดิม (RX:/CrCl/Dx:/AN)
   if (/(^|\|)(RX:|CrCl|SCr|Dx:|Alg:|G6PD|AN[0-9])/i.test(text)) {
     return parseIpdFields(text)
   }
