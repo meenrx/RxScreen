@@ -108,16 +108,40 @@ export default function ScreeningPage() {
     }
     const cur = useScreeningStore.getState()
     setDrugs([...cur.drugs, ...newDrugs])
+    // รวมชื่อยาที่แพ้เข้ากับที่มีอยู่ (dedupe, ไม่ทับของเดิม)
+    const allergies = data.allergies?.length
+      ? Array.from(new Set([...(cur.patient.allergies ?? []), ...data.allergies]))
+      : cur.patient.allergies
+    // รวม ICD10 จาก QR เข้ากับโรคที่เลือกไว้
+    const diseases = data.diseases?.length
+      ? Array.from(new Set([...(cur.patient.diseases ?? []), ...data.diseases]))
+      : cur.patient.diseases
+    // รวมค่าแล็บ (K/AST/ALT/…) ที่ QR ส่งมา
+    const labs = data.labs ? { ...(cur.patient.labs ?? {}), ...data.labs } : cur.patient.labs
     setPatient({
       ...cur.patient,
       hn: data.hn ?? cur.patient.hn,
       patient_name: data.patient_name ?? cur.patient.patient_name,
       age: data.age ?? cur.patient.age,
       sex: data.sex ?? cur.patient.sex,
+      weight: data.weight ?? cur.patient.weight,
+      scr: data.scr ?? cur.patient.scr,
+      egfr: data.crcl ?? cur.patient.egfr,
+      labs,
+      g6pd: data.g6pd ?? cur.patient.g6pd,
+      g6pd_tested: data.g6pd_tested ?? cur.patient.g6pd_tested,
+      is_pregnant: data.is_pregnant ?? cur.patient.is_pregnant,
+      is_lactating: data.is_lactating ?? cur.patient.is_lactating,
+      allergies,
+      diseases,
     })
+    // ซิงค์โรคที่ QR ส่งมาเข้า panel เลือกโรค (เพื่อให้คัดกรอง disease–drug ทำงาน)
+    if (data.diseases?.length) setSelectedDiseases((prev) => Array.from(new Set([...prev, ...data.diseases!])))
+    // เตือนถ้ายังไม่เจาะ G6PD (— ไม่ใช่ปกติ)
+    if (data.g6pd_tested === false) toast.warning('ยังไม่ได้เจาะ G6PD — ตรวจสอบก่อนจ่ายยากลุ่ม oxidant')
     if (newDrugs.length > 0) toast.success(`สแกนได้ ${newDrugs.length} รายการยา`)
     if (notFound.length > 0) toast.warning(`ไม่พบ icode: ${notFound.join(', ')}`)
-  }, [drugMasters, setDrugs, setPatient])
+  }, [drugMasters, setDrugs, setPatient, setSelectedDiseases])
 
   async function saveLog() {
     if (!user) return
