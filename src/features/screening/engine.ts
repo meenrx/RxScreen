@@ -2,6 +2,7 @@ import type { DdiOverride, DiseaseRule, DrugMaster, HadRule, LabRule, DrugSubsti
 import type { DrugEntry, PatientInput, ScreeningAlert } from '@/types/screening'
 import { calcCrCl, findMatchingDoseAction, renalBasisOf, computePediatricDose } from '@/features/renal/calc'
 import { buildRduAlerts } from './rduRules'
+import { findRenalRef, pickRenalBand } from './renalDoseRef'
 
 function nameEq(a: string | undefined, b: string | undefined): boolean {
   if (!a || !b) return false
@@ -250,6 +251,74 @@ export function buildRenalAlerts(drugs: DrugEntry[], patient: PatientInput): Scr
       drugs: [drug.icode],
       source: rule,
       recommendation: action,
+    })
+  }
+  return alerts
+}
+
+/** CrCl ผู้ป่วย (Cockcroft-Gault) — คืน undefined ถ้าข้อมูลไม่พอ */
+function patientGfr(patient: PatientInput): { gfr: number; label: 'CrCl' | 'eGFR' } | undefined {
+  if (patient.scr && patient.age && patient.weight && patient.sex) {
+    const { crcl } = calcCrCl({ age: patient.age, weight: patient.weight, height: patient.height, sex: patient.sex, scr: patient.scr })
+    return { gfr: Math.round(crcl), label: 'CrCl' }
+  }
+  if (patient.egfr !== undefined) return { gfr: patient.egfr, label: 'eGFR' }
+  return undefined
+}
+
+/**
+ * Renal dose ref alerts — จับคู่ยาด้วย generic name กับคู่มือ (RENAL_DOSE_REF)
+ * แสดง "ขนาดปกติ + ปรับตาม CrCl ผู้ป่วย + คำนวณ mg จากน้ำหนัก" ในผลคัดกรองทันที
+ * ข้าม icode ที่มี LAB_RULE.dose_meta คุมอยู่แล้ว (กันเตือนซ้ำ)
+ */
+export function buildRenalRefAlerts(drugs: DrugEntry[], patient: PatientInput, skipIcodes?: Set<string>): ScreeningAlert[] {
+  const alerts: ScreeningAlert[] = []
+  const g = patientGfr(patient)
+  for (const drug of drugs) {
+    if (skipIcodes?.has(drug.icode)) continue
+    const ref = findRenalRef(drug.master?.generic_name, drug.master?.drug_name ?? drug.drug_name)
+    if (!ref) continue
+
+    // ยังไม่มีค่า CrCl → เตือนเบา ๆ ว่ายานี้ต้องดูไต (ให้ไปกรอก SCr/น้ำหนัก)
+    if (!g) {
+      alerts.push({
+        id: `renalref_nogfr_${drug.icode}`,
+        type: 'RENAL', severity: 'yellow',
+        title: `🧪 ${drug.master?.drug_name ?? drug.icode} — ปรับขนาดตามไต (ยังไม่มีค่า CrCl)`,
+        detail: `${ref.normalDose ? `ขนาดปกติ: ${ref.normalDose} · ` : ''}ต้องปรับเมื่อ CrCl < ${ref.threshold} — กรอก SCr + น้ำหนัก เพื่อประเมิน`,
+        drugs: [drug.icode],
+        recommendation: 'กรอก SCr และน้ำหนัก เพื่อคำนวณ CrCl',
+      })
+      continue
+    }
+
+    // มีค่า CrCl แต่ยังไม่ต่ำถึงเกณฑ์ → ไม่ต้องเตือน
+    if (g.gfr >= ref.threshold) continue
+
+    const band = pickRenalBand(ref, g.gfr)
+    const isHardStop = band ? /ห้าม|หลีกเลี่ยง|ไม่แนะนำ|avoid|contraindicat/i.test(band.text) : false
+
+    // คำนวณ mg จากน้ำหนักจริง (ยา mg/kg)
+    let wtCalc = ''
+    if (ref.weightBased && ref.mgPerKgNormal && patient.weight) {
+      const mg = Math.round(ref.mgPerKgNormal * patient.weight)
+      wtCalc = ` · น้ำหนัก ${patient.weight} kg → ขนาดปกติ ≈ ${mg} mg (${ref.mgPerKgNormal} mg/kg)`
+    }
+
+    const detailParts = [
+      ref.normalDose ? `ขนาดปกติ: ${ref.normalDose}` : null,
+      band ? `แนวทางปรับ (${g.label} ${g.gfr}): ${band.text}` : null,
+      ref.note ? `⚠ ${ref.note}` : null,
+    ].filter(Boolean)
+
+    alerts.push({
+      id: `renalref_${drug.icode}`,
+      type: 'RENAL',
+      severity: isHardStop ? 'red' : 'orange',
+      title: `${isHardStop ? '🚫' : '⚠️'} ${drug.master?.drug_name ?? drug.icode} — ปรับขนาดตามไต (${g.label} ${g.gfr})${wtCalc}`,
+      detail: detailParts.join(' · ') + ` · อ้างอิง ${ref.source} — ตรวจสอบก่อนจ่าย`,
+      drugs: [drug.icode],
+      recommendation: band?.text ?? `ปรับขนาดเมื่อ ${g.label} < ${ref.threshold}`,
     })
   }
   return alerts
@@ -843,6 +912,10 @@ export interface ScreenContext {
 }
 
 export function runScreening(ctx: ScreenContext): ScreeningAlert[] {
+  // renal: icode-based dose_meta (ตั้งเฉพาะ รพ.) ก่อน แล้วเติม generic-ref จากคู่มือสำหรับ icode ที่ยังไม่ถูกคุม
+  const renalIcode = buildRenalAlerts(ctx.drugs, ctx.patient)
+  const renalCovered = new Set(renalIcode.flatMap((a) => a.drugs ?? []))
+  const renalRef = buildRenalRefAlerts(ctx.drugs, ctx.patient, renalCovered)
   return [
     ...buildAllergyAlerts(ctx.drugs, ctx.patient.allergies),
     ...buildHadAlerts(ctx.drugs, ctx.hadRules ?? []),
@@ -853,7 +926,8 @@ export function runScreening(ctx: ScreenContext): ScreeningAlert[] {
     ...buildPregnancyAlerts(ctx.drugs, ctx.patient),
     ...buildLactationAlerts(ctx.drugs, ctx.patient),
     ...buildBeersAlerts(ctx.drugs, ctx.patient),
-    ...buildRenalAlerts(ctx.drugs, ctx.patient),
+    ...renalIcode,
+    ...renalRef,
     ...buildDrpAlerts(ctx.drugs, ctx.noDuplicateClasses),
     ...buildDupClassAlerts(ctx.drugs),
     ...buildLabAlerts(ctx.drugs, ctx.labRules, ctx.patient),
