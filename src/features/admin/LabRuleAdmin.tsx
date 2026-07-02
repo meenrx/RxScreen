@@ -64,7 +64,7 @@ interface BuilderProps {
   basisLabel: string
 }
 
-function DoseMetaBuilder({ value, onChange, basisLabel }: BuilderProps) {
+export function DoseMetaBuilder({ value, onChange, basisLabel }: BuilderProps) {
   const [rows, setRows] = useState<DoseRow[]>(() => parseDoseMetaRows(value ?? ''))
   const [advanced, setAdvanced] = useState(false)
   const [raw, setRaw] = useState<string>(value ?? '')

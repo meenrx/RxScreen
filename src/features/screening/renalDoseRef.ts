@@ -208,3 +208,12 @@ export function pickRenalBand(ref: RenalDoseRef, crcl: number): RenalDoseBand | 
   const sorted = [...ref.bands].sort((a, b) => a.max - b.max)
   return sorted.find((b) => crcl <= b.max)
 }
+
+/** แปลงเกณฑ์คู่มือ → dose_meta string (รูปแบบเดียวกับ LAB_RULE) ไว้ prefill ตอนแก้ไข
+ *  เช่น "<=10:q24h; <=50:q8-12h" */
+export function refToDoseMeta(ref: RenalDoseRef): string {
+  return [...ref.bands]
+    .sort((a, b) => a.max - b.max)
+    .map((b) => `<=${b.max}:${b.text}`)
+    .join('; ')
+}
