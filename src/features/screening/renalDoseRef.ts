@@ -54,7 +54,7 @@ export const RENAL_DOSE_REF: RenalDoseRef[] = [
     note: 'ต้อง monitor peak/trough + SCr — narrow therapeutic index', source: SANFORD,
   },
   {
-    generic: 'amikacin', aliases: ['streptomycin'],
+    generic: 'amikacin', aliases: ['streptomycin', 'kanamycin'],
     normalDose: '15 mg/kg q24h (once-daily)', threshold: 60, weightBased: true, mgPerKgNormal: 15,
     bands: [
       { max: 10, text: 'ยืดระยะห่าง (มัก q48–72h) + วัด level — 3 mg/kg' },

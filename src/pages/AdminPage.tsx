@@ -7,6 +7,7 @@ import { CounselingAdmin } from '@/features/admin/CounselingAdmin'
 import { DiseaseAdmin } from '@/features/admin/DiseaseAdmin'
 import { UsersAdmin } from '@/features/admin/UsersAdmin'
 import { HadRuleAdmin } from '@/features/admin/HadRuleAdmin'
+import { RenalRefAdmin } from '@/features/admin/RenalRefAdmin'
 
 export default function AdminPage() {
   const [tab, setTab] = useState('drugs')
@@ -20,6 +21,7 @@ export default function AdminPage() {
         <TabsList className="overflow-x-auto max-w-full">
           <TabsTrigger value="drugs">ยา (DRUG_MASTER)</TabsTrigger>
           <TabsTrigger value="lab">Lab/Dose</TabsTrigger>
+          <TabsTrigger value="renal">💧 เกณฑ์ไต</TabsTrigger>
           <TabsTrigger value="ddi">DDI</TabsTrigger>
           <TabsTrigger value="had">🔴 HAD</TabsTrigger>
           <TabsTrigger value="counseling">Counseling</TabsTrigger>
@@ -28,6 +30,7 @@ export default function AdminPage() {
         </TabsList>
         <TabsContent value="drugs"><DrugMasterAdmin /></TabsContent>
         <TabsContent value="lab"><LabRuleAdmin /></TabsContent>
+        <TabsContent value="renal"><RenalRefAdmin /></TabsContent>
         <TabsContent value="ddi"><DdiAdmin /></TabsContent>
         <TabsContent value="had"><HadRuleAdmin /></TabsContent>
         <TabsContent value="counseling"><CounselingAdmin /></TabsContent>

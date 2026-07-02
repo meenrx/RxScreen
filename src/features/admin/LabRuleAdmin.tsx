@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { DrugCombobox } from '@/components/DrugCombobox'
 import { HelpHint } from '@/components/HelpHint'
 import { useLabRules, useSaveLabRule, useDelete, useDrugs } from '@/features/catalog/hooks'
-import type { LabRule } from '@/types/drug'
+import type { LabRule, DrugMaster } from '@/types/drug'
 
 // ===== dose_meta parser/serializer สำหรับ DoseMetaBuilder =====
 type DoseOp = '<' | '<=' | '>' | '>=' | '=' | 'range'
@@ -180,10 +180,10 @@ export function LabRuleAdmin() {
   const [edit, setEdit] = useState<LabRule | null>(null)
   const [open, setOpen] = useState(false)
 
-  // Map icode → drug_name สำหรับแสดงในตาราง
+  // Map icode → DrugMaster (เต็ม) สำหรับแสดงชื่อ+รูปแบบ+ความแรง เหมือนหน้า Drug Master
   const drugMap = useMemo(() => {
-    const m = new Map<string, string>()
-    drugs.forEach((d) => m.set(d.icode, d.drug_name))
+    const m = new Map<string, DrugMaster>()
+    drugs.forEach((d) => m.set(d.icode, d))
     return m
   }, [drugs])
 
@@ -191,7 +191,8 @@ export function LabRuleAdmin() {
     const s = search.toLowerCase()
     if (!s) return data
     return data.filter((d) => {
-      const name = drugMap.get(d.icode) ?? d.drug_name ?? ''
+      const m = drugMap.get(d.icode)
+      const name = `${m?.drug_name ?? d.drug_name ?? ''} ${m?.generic_name ?? ''}`
       return d.icode.toLowerCase().includes(s) || d.param?.toLowerCase().includes(s) || name.toLowerCase().includes(s)
     })
   }, [data, search, drugMap])
@@ -237,8 +238,19 @@ export function LabRuleAdmin() {
             {filtered.map((d) => (
               <TableRow key={d.id}>
                 <TableCell>
-                  <div className="font-medium text-sm">{drugMap.get(d.icode) ?? d.drug_name ?? '-'}</div>
-                  <div className="font-mono text-[10px] text-muted-foreground">{d.icode}</div>
+                  {(() => {
+                    const m = drugMap.get(d.icode)
+                    const spec = [m?.strength, m?.dosage_form ?? m?.form].filter(Boolean).join(' · ')
+                    return (
+                      <>
+                        <div className="font-medium text-sm">{m?.drug_name ?? d.drug_name ?? '-'}</div>
+                        {m?.generic_name && <div className="text-[11px] text-muted-foreground">{m.generic_name}</div>}
+                        <div className="font-mono text-[10px] text-muted-foreground">
+                          {d.icode}{spec && <span className="font-sans"> · {spec}</span>}
+                        </div>
+                      </>
+                    )
+                  })()}
                   {d.indication && (
                     <div className="text-[10px] text-amber-700 dark:text-amber-300 mt-0.5">📍 {d.indication}</div>
                   )}
