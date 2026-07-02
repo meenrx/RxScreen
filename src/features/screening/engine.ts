@@ -144,8 +144,9 @@ function readPatientLab(p: PatientInput, param?: string): number | undefined {
   }
   if (k.includes('scr') || k.includes('creat')) return p.scr
   if (k === 'inr') return p.inr
-  if (k === 'bun') return undefined // ยังไม่รองรับ — ผู้ใช้กรอกแยก
-  return undefined
+  // ค่าแล็บอื่น ๆ จาก labs map (K, AST, ALT, BUN, ...) — เทียบชื่อ param แบบ normalize
+  const labKey = k.replace(/[^a-z0-9]/g, '')
+  return p.labs?.[k] ?? p.labs?.[labKey]
 }
 
 function isInNormalRange(value: number | undefined, range?: string): boolean | undefined {

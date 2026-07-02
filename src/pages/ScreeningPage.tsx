@@ -111,6 +111,14 @@ export default function ScreeningPage() {
     // 2) ใส่ยา (ที่จับคู่ได้ทันที) + ข้อมูลคนไข้เข้า store เดี๋ยวนั้น → chips + ฟอร์มโผล่เลย
     const cur = useScreeningStore.getState()
     if (inMemory.length > 0) setDrugs([...cur.drugs, ...inMemory])
+    // รวมค่าที่ติดมากับ QR เข้ากับของเดิม (dedupe ไม่ทับ)
+    const allergies = data.allergies?.length
+      ? Array.from(new Set([...(cur.patient.allergies ?? []), ...data.allergies]))
+      : cur.patient.allergies
+    const diseases = data.diseases?.length
+      ? Array.from(new Set([...(cur.patient.diseases ?? []), ...data.diseases]))
+      : cur.patient.diseases
+    const labs = data.labs ? { ...(cur.patient.labs ?? {}), ...data.labs } : cur.patient.labs
     setPatient({
       ...cur.patient,
       hn: data.hn ?? cur.patient.hn,
@@ -118,18 +126,21 @@ export default function ScreeningPage() {
       age: data.age ?? cur.patient.age,
       sex: data.sex ?? cur.patient.sex,
       weight: data.weight ?? cur.patient.weight,
-      egfr: data.egfr ?? cur.patient.egfr,
       scr: data.scr ?? cur.patient.scr,
+      egfr: data.crcl ?? cur.patient.egfr,
+      labs,
       g6pd: data.g6pd ?? cur.patient.g6pd,
+      g6pd_tested: data.g6pd_tested ?? cur.patient.g6pd_tested,
       is_pregnant: data.is_pregnant ?? cur.patient.is_pregnant,
-      allergies: data.allergies ?? cur.patient.allergies,
+      is_lactating: data.is_lactating ?? cur.patient.is_lactating,
+      allergies,
+      diseases,
     })
-    if (data.labs && Object.keys(data.labs).length > 0) {
-      setLabValues((prev) => ({ ...prev, ...data.labs }))
-    }
-    if (inMemory.length > 0) {
-      toast.success(`สแกนได้ ${inMemory.length} รายการยา${data.dx ? ` · Dx: ${data.dx}` : ''}`)
-    }
+    // ซิงค์โรคที่ QR ส่งมาเข้า panel เลือกโรค (ให้คัดกรอง disease–drug ทำงาน)
+    if (data.diseases?.length) setSelectedDiseases((prev) => Array.from(new Set([...prev, ...data.diseases!])))
+    // เตือนถ้ายังไม่เจาะ G6PD (— ไม่ใช่ปกติ)
+    if (data.g6pd_tested === false) toast.warning('ยังไม่ได้เจาะ G6PD — ตรวจสอบก่อนจ่ายยากลุ่ม oxidant')
+    if (inMemory.length > 0) toast.success(`สแกนได้ ${inMemory.length} รายการยา`)
 
     // 3) เบื้องหลัง (ขนานทั้งหมด): โหลด labRules ของยาที่ add แล้ว + หา master ของยาที่ยังไม่เจอใน memory
     const [rulesForInMem, fetched] = await Promise.all([
@@ -163,7 +174,7 @@ export default function ScreeningPage() {
     if (inMemory.length === 0 && fetchedEntries.length === 0 && notFound.length === 0) {
       toast.warning('อ่าน QR ได้ แต่ไม่พบรายการยาในข้อมูล — ตรวจรูปแบบ QR หรือใช้ช่อง "วาง/พิมพ์"')
     }
-  }, [drugMasters, setDrugs, setPatient, setLabValues])
+  }, [drugMasters, setDrugs, setPatient, setSelectedDiseases])
 
   async function saveLog() {
     if (!user) return

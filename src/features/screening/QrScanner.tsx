@@ -8,20 +8,28 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 export interface ScannedData {
   hn?: string
+  /** เลข admission (IPD) */
+  an?: string
   patient_name?: string
   age?: number
   sex?: 'M' | 'F'
+  /** น้ำหนัก (kg) */
   weight?: number
-  /** CrCl/eGFR (mL/min) กรอกตรงจากฉลาก */
-  egfr?: number
+  /** CrCl (mL/min) — Cockcroft-Gault ฝั่ง รพ. */
+  crcl?: number
+  /** serum creatinine (mg/dL) */
   scr?: number
-  g6pd?: boolean
-  is_pregnant?: boolean
-  allergies?: string[]
-  /** วินิจฉัย ICD-10 ดิบจากฉลาก (เช่น A090) — แสดงให้เภสัชกรเห็น ยังไม่ auto-map เป็น disease */
-  dx?: string
-  /** ค่าแลบอื่น ๆ ที่ติดมากับฉลาก (key = param เช่น k/ast/alt) */
+  /** ค่าแล็บอื่น ๆ keyed lowercase: k, ast, alt, ... */
   labs?: Record<string, number>
+  /** true=พร่อง, false=ปกติ, undefined=ยังไม่เจาะ */
+  g6pd?: boolean
+  g6pd_tested?: boolean
+  /** ชื่อยาที่แพ้ (list) */
+  allergies?: string[]
+  /** ICD10 ทั้งหมดของ admission */
+  diseases?: string[]
+  is_pregnant?: boolean
+  is_lactating?: boolean
   drugs: { icode: string; sig?: string; drug_name?: string }[]
 }
 
@@ -183,12 +191,65 @@ export function QrScannerModal({ open, onOpenChange, onScan }: Props) {
  * รูปแบบ 2 — Pipe-delimited:
  *   RXS|HN|ชื่อ|อายุ|เพศ|icode1:sig1|icode2:sig2|...
  *
+ * รูปแบบ 2.5 — IPD 14-field (key-prefixed, คั่นด้วย "|", list ภายในคั่นด้วย ","):
+ *   AN690002061|RX:1000131,1000135|A77|SM|BW60|CrCl51|SCr1.03|K3.72|AST306|ALT125|G6PD-|Alg:SULFA|Dx:D649,K922|PgN
+ *   "-" = ไม่มีข้อมูล field นั้น (แยกจากค่าปกติ)
+ *
  * รูปแบบ 3 — บรรทัด/comma (icodes อย่างเดียว):
  *   CEFTRX, AMOX, PARA
  */
+function num(v: string | undefined): number | undefined {
+  if (v === undefined || v === '') return undefined
+  const n = Number(v)
+  return Number.isFinite(n) ? n : undefined
+}
+
+/** parse IPD 14-field แบบ key-based (ทนต่อลำดับ + จับ key ยาวสุดก่อนกัน A ชน AST) */
+function parseIpdFields(text: string): ScannedData {
+  // เรียง key ยาว→สั้น/เฉพาะเจาะจงก่อน เพื่อไม่ให้ A ไปจับ AST/ALT/AN, S ไปจับ SCr ฯลฯ
+  const KEYS = ['CrCl', 'G6PD', 'SCr', 'AST', 'ALT', 'Alg:', 'Dx:', 'RX:', 'AN', 'BW', 'Pg', 'A', 'S', 'K']
+  const out: ScannedData = { drugs: [], labs: {} }
+  for (const seg of text.split('|')) {
+    const s = seg.trim()
+    if (!s) continue
+    const key = KEYS.find((k) => s.startsWith(k))
+    if (!key) continue
+    const bare = key.replace(':', '')
+    let val: string | undefined = s.slice(bare.length).replace(/^:/, '').trim()
+    if (val === '-' || val === '') val = undefined // "-" = ไม่มีข้อมูล
+    switch (bare) {
+      case 'AN': out.an = val; out.hn = val; break
+      case 'RX': out.drugs = (val ?? '').split(',').map((x) => x.trim()).filter(Boolean).map((icode) => ({ icode })); break
+      case 'A': out.age = num(val); break
+      case 'S': out.sex = val === 'M' || val === 'F' ? val : undefined; break
+      case 'BW': out.weight = num(val); break
+      case 'CrCl': out.crcl = num(val); break
+      case 'SCr': out.scr = num(val); break
+      case 'K': if (num(val) !== undefined) out.labs!.k = num(val)!; break
+      case 'AST': if (num(val) !== undefined) out.labs!.ast = num(val)!; break
+      case 'ALT': if (num(val) !== undefined) out.labs!.alt = num(val)!; break
+      case 'G6PD':
+        // val undefined ("-") = ยังไม่เจาะ · มีคำว่า defic = พร่อง · อื่น ๆ = ปกติ
+        if (val === undefined) { out.g6pd_tested = false }
+        else { out.g6pd_tested = true; out.g6pd = /defic/i.test(val) }
+        break
+      case 'Alg': out.allergies = val ? val.split(',').map((x) => x.trim()).filter(Boolean) : undefined; break
+      case 'Dx': out.diseases = val ? val.split(',').map((x) => x.trim()).filter(Boolean) : undefined; break
+      case 'Pg': out.is_pregnant = val ? /^y/i.test(val) : undefined; break
+    }
+  }
+  if (out.labs && Object.keys(out.labs).length === 0) delete out.labs
+  return out
+}
+
 export function parseQrPayload(raw: string): ScannedData {
   const text = raw.trim()
   if (!text) throw new Error('ข้อมูล QR ว่าง')
+
+  // IPD 14-field — ตรวจก่อน pipe ทั่วไป (มี key เฉพาะอย่าง RX:/CrCl/Dx:/AN)
+  if (/(^|\|)(RX:|CrCl|SCr|Dx:|Alg:|G6PD|AN[0-9])/i.test(text)) {
+    return parseIpdFields(text)
+  }
 
   // JSON
   if (text.startsWith('{')) {
@@ -198,6 +259,13 @@ export function parseQrPayload(raw: string): ScannedData {
       patient_name: obj.name ?? obj.patient_name,
       age: obj.age !== undefined ? Number(obj.age) : undefined,
       sex: obj.sex as 'M' | 'F' | undefined,
+      weight: num(String(obj.wt ?? obj.weight ?? '')),
+      crcl: num(String(obj.cr ?? obj.crcl ?? '')),
+      scr: num(String(obj.scr ?? '')),
+      allergies: Array.isArray(obj.allergies) ? obj.allergies : undefined,
+      diseases: Array.isArray(obj.dx ?? obj.diseases) ? (obj.dx ?? obj.diseases) : undefined,
+      is_pregnant: obj.is_pregnant ?? (obj.pg !== undefined ? /^y|^1|^t/i.test(String(obj.pg)) : undefined),
+      is_lactating: obj.is_lactating,
       drugs: Array.isArray(obj.drugs)
         ? obj.drugs.map((d: { icode?: string; drug?: string; sig?: string; name?: string; drug_name?: string }) => ({
             icode: (d.icode ?? d.drug ?? '').toString(),
@@ -208,16 +276,10 @@ export function parseQrPayload(raw: string): ScannedData {
     }
   }
 
-  // Pipe-delimited
+  // Pipe-delimited (legacy positional: RXS|HN|Name|age|sex|icode:sig|...)
+  // หมายเหตุ: ฉลาก รพ. แบบ prefix (RX:/CrCl/...) ถูกดักด้วย parseIpdFields ด้านบนแล้ว
   if (text.includes('|')) {
     const parts = text.split('|')
-
-    // รูปแบบฉลาก รพ. (prefix-tagged) — ตรวจจากการมี segment ขึ้นต้น "RX:"
-    //   AN580007583|RX:1000011,1000054|A59|SF|BW61|CrCl80|SCr0.73|K4.59|AST42|ALT67|G6PD-|Alg:-|Dx:A090|PgN
-    if (parts.some((p) => /^\s*RX:/i.test(p))) {
-      return parseHospitalSticker(parts)
-    }
-
     const head = parts[0].toUpperCase().trim()
     let i = 0
     if (head === 'RXS') i = 1
@@ -245,63 +307,4 @@ export function parseQrPayload(raw: string): ScannedData {
   })
   if (drugs.length === 0) throw new Error('ไม่พบรายการยาในข้อมูล')
   return { drugs }
-}
-
-/**
- * Parse ฉลากยา รพ. — pipe-delimited แบบติด prefix (อ่านตาม tag ไม่ยึดตำแหน่ง):
- *   AN580007583 | RX:icode,icode | A59 | SF | BW61 | CrCl80 | SCr0.73 |
- *   K4.59 | AST42 | ALT67 | G6PD- | Alg:- | Dx:A090 | PgN
- *
- * - RX:   → รายการ icode ยา (คั่นด้วย comma)
- * - AN../HN.. → เลขผู้ป่วย   A59 → อายุ   SF/SM → เพศ   BW61 → น้ำหนัก
- * - CrCl → eGFR   SCr → serum Cr   G6PD-/+ → G6PD   Alg: → แพ้ยา ("-" = ไม่มี)
- * - Dx:  → ICD-10   Pg N/Y → ตั้งครรภ์   token อื่น เช่น K/AST/ALT → เก็บเป็น lab
- */
-function parseHospitalSticker(parts: string[]): ScannedData {
-  const out: ScannedData = { drugs: [], labs: {} }
-  const num = (s: string) => {
-    const n = Number(s.replace(/[^\d.]/g, ''))
-    return Number.isFinite(n) ? n : undefined
-  }
-
-  for (const raw of parts) {
-    const seg = raw.trim()
-    if (!seg) continue
-    const up = seg.toUpperCase()
-
-    if (up.startsWith('RX:')) {
-      out.drugs = seg.slice(3).split(/[,\s]+/).map((s) => s.trim()).filter(Boolean).map((icode) => ({ icode }))
-    } else if (up.startsWith('ALG:')) {
-      const rest = seg.slice(4).trim()
-      out.allergies = rest && rest !== '-' ? rest.split(/[,;]+/).map((s) => s.trim()).filter(Boolean) : []
-    } else if (up.startsWith('DX:')) {
-      out.dx = seg.slice(3).trim() || undefined
-    } else if (/^(AN|HN)[\w-]+$/i.test(seg)) {
-      out.hn = seg
-    } else if (/^A\d+$/i.test(seg)) {
-      out.age = num(seg)
-    } else if (/^S[MF]$/i.test(seg)) {
-      out.sex = up[1] as 'M' | 'F'
-    } else if (/^BW[\d.]+$/i.test(seg)) {
-      out.weight = num(seg)
-    } else if (up.startsWith('CRCL')) {
-      out.egfr = num(seg)
-    } else if (up.startsWith('SCR')) {
-      out.scr = num(seg)
-      if (out.scr !== undefined) out.labs!.scr = out.scr
-    } else if (up.startsWith('G6PD')) {
-      const v = seg.slice(4).trim().toLowerCase()
-      if (['+', 'def', 'pos', 'positive', 'y', 'yes'].includes(v)) out.g6pd = true
-      else if (['-', 'neg', 'normal', 'n', 'no'].includes(v)) out.g6pd = false
-    } else if (up.startsWith('PG')) {
-      const v = seg.slice(2).trim().toLowerCase()
-      if (['y', 'yes', '+'].includes(v)) out.is_pregnant = true
-      else if (['n', 'no', '-'].includes(v)) out.is_pregnant = false
-    } else {
-      // lab ทั่วไป เช่น K4.59, AST42, ALT67, NA140
-      const m = seg.match(/^([A-Za-z][A-Za-z0-9]*?)([\d.]+)$/)
-      if (m) out.labs![m[1].toLowerCase()] = Number(m[2])
-    }
-  }
-  return out
 }

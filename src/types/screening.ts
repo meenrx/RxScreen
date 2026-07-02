@@ -11,6 +11,11 @@ export interface PatientInput {
   /** eGFR/CrCl ที่กรอกตรง (mL/min) — ถ้ามี ใช้ค่านี้ปรับ dose ได้เลย ไม่ต้องคำนวณจาก SCr */
   egfr?: number
   inr?: number
+  /** ค่าแล็บอื่น ๆ (จาก QR/กรอกมือ) — key เป็นตัวพิมพ์เล็กของชื่อ param เช่น k, ast, alt, bun
+   *  ใช้เทียบกับ LAB_RULE.param ที่ไม่ใช่ scr/crcl/inr */
+  labs?: Record<string, number>
+  /** true=เจาะแล้วผิดปกติ/พร่อง, false=เจาะแล้วปกติ, undefined=ยังไม่เจาะ (แยกจาก g6pd) */
+  g6pd_tested?: boolean
   /** อายุครรภ์ (สัปดาห์) ถ้าตั้งครรภ์ */
   pregnancy_weeks?: number
   is_pregnant?: boolean
