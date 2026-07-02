@@ -313,6 +313,8 @@ export interface DrugSubstitution {
 export interface DispensingLog {
   id?: string
   hn?: string
+  /** เลข admission (IPD) — ใช้ตามรอย prescribing error ย้อนหลัง */
+  an?: string
   patient_name?: string
   age?: number
   weight?: number
@@ -322,6 +324,12 @@ export interface DispensingLog {
   is_pregnant?: boolean
   drugs: { icode: string; drug_name: string; sig?: string }[]
   alerts_count: number
+  /** จำนวน alert แยกตามระดับความรุนแรง — ใช้ทำรายงาน dashboard */
+  red_count?: number
+  orange_count?: number
+  yellow_count?: number
+  /** ชนิด alert ที่พบ (dedupe ต่อการคัดกรอง) เช่น ['DDI','RENAL'] — ใช้หา "ประเด็นที่พบบ่อย" */
+  alert_types?: string[]
   ddi_count: number
   drp_count: number
   ai_summary?: string

@@ -2,6 +2,8 @@ import type { DdiOverride, DiseaseRule, DrugMaster, HadRule, LabRule } from './d
 
 export interface PatientInput {
   hn?: string
+  /** เลข admission (IPD) — ใช้ตามรอยย้อนหลัง */
+  an?: string
   patient_name?: string
   age?: number
   weight?: number

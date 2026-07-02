@@ -697,19 +697,39 @@ export function buildBeersAlerts(drugs: DrugEntry[], patient: PatientInput): Scr
 // ============ G6PD ============
 export function buildG6pdAlerts(drugs: DrugEntry[], patient: PatientInput): ScreeningAlert[] {
   const hasG6pd = patient.g6pd === true || patient.diseases?.some((d) => d.toUpperCase() === 'G6PD')
-  if (!hasG6pd) return []
-  return drugs
-    .filter((d) => d.master?.g6pd_unsafe)
-    .map((d) => ({
+  const oxidantDrugs = drugs.filter((d) => d.master?.g6pd_unsafe)
+  if (oxidantDrugs.length === 0) return []
+
+  // เจาะแล้วพร่อง → ห้ามใช้ (แดง)
+  if (hasG6pd) {
+    return oxidantDrugs.map((d) => ({
       id: `g6pd_${d.icode}`,
       type: 'G6PD' as const,
       severity: 'red' as const,
-      title: `🩸 G6PD + ${d.master!.drug_name} — ห้ามใช้`,
+      title: `🩸 G6PD พร่อง + ${d.master!.drug_name} — ห้ามใช้`,
       detail: 'ยานี้ทำให้เกิด hemolysis ในผู้ป่วย G6PD deficiency',
       recommendation: 'เปลี่ยนยาทันที',
       drugs: [d.icode],
       source: d.master,
     }))
+  }
+
+  // ยังไม่เจาะ G6PD (g6pd_tested === false) แต่มียา oxidant → เตือนให้เจาะก่อน (ส้ม)
+  // "-" = ยังไม่เจาะ ≠ ปกติ — ต้องเตือน ไม่ใช่ปล่อยผ่าน
+  if (patient.g6pd_tested === false) {
+    return oxidantDrugs.map((d) => ({
+      id: `g6pd_untested_${d.icode}`,
+      type: 'G6PD' as const,
+      severity: 'orange' as const,
+      title: `🩸 ยังไม่เจาะ G6PD + ${d.master!.drug_name}`,
+      detail: 'ผู้ป่วยยังไม่มีผล G6PD แต่ยานี้เป็น oxidant — เสี่ยง hemolysis ถ้าผู้ป่วยพร่อง G6PD',
+      recommendation: 'เจาะ G6PD ก่อนจ่าย หรือเลือกยาที่ปลอดภัยกว่า',
+      drugs: [d.icode],
+      source: d.master,
+    }))
+  }
+
+  return []
 }
 
 // ============ Food / Smoking / Alcohol ============

@@ -27,8 +27,18 @@ import { logDispensing } from '@/features/history/api'
 import { useAuthStore } from '@/features/auth/authStore'
 import { getConfig, getDrugByIcode, listLabRulesForDrug } from '@/features/catalog/api'
 import { toast } from 'sonner'
-import type { DrugEntry } from '@/types/screening'
+import type { DrugEntry, ScreeningAlert } from '@/types/screening'
 import type { LabRule } from '@/types/drug'
+
+/** สรุป alert แยกระดับ + ชนิด (dedupe) สำหรับบันทึกลง log → ใช้ทำรายงาน dashboard */
+function alertSummary(alerts: ScreeningAlert[]) {
+  return {
+    red_count: alerts.filter((a) => a.severity === 'red').length,
+    orange_count: alerts.filter((a) => a.severity === 'orange').length,
+    yellow_count: alerts.filter((a) => a.severity === 'yellow').length,
+    alert_types: Array.from(new Set(alerts.map((a) => a.type))),
+  }
+}
 
 export default function ScreeningPage() {
   const patient = useScreeningStore((s) => s.patient)
@@ -68,6 +78,7 @@ export default function ScreeningPage() {
     try {
       const ref = await logDispensing({
         hn: st.patient.hn,
+        an: st.patient.an,
         patient_name: st.patient.patient_name,
         age: st.patient.age,
         weight: st.patient.weight,
@@ -76,6 +87,7 @@ export default function ScreeningPage() {
         is_pregnant: st.patient.is_pregnant,
         drugs: st.drugs.map((d) => ({ icode: d.icode, drug_name: d.drug_name, sig: d.sig })),
         alerts_count: alerts.length,
+        ...alertSummary(alerts),
         ddi_count: alerts.filter((a) => a.type === 'DDI').length,
         drp_count: alerts.filter((a) => a.type === 'DRP').length,
         ai_summary: st.aiText,
@@ -121,6 +133,7 @@ export default function ScreeningPage() {
     const labs = data.labs ? { ...(cur.patient.labs ?? {}), ...data.labs } : cur.patient.labs
     setPatient({
       ...cur.patient,
+      an: data.an ?? cur.patient.an,
       hn: data.hn ?? cur.patient.hn,
       patient_name: data.patient_name ?? cur.patient.patient_name,
       age: data.age ?? cur.patient.age,
@@ -132,7 +145,8 @@ export default function ScreeningPage() {
       g6pd: data.g6pd ?? cur.patient.g6pd,
       g6pd_tested: data.g6pd_tested ?? cur.patient.g6pd_tested,
       is_pregnant: data.is_pregnant ?? cur.patient.is_pregnant,
-      is_lactating: data.is_lactating ?? cur.patient.is_lactating,
+      // QR field "Pg" รวมตั้งครรภ์+ให้นม → Y ถือว่าเสี่ยงทั้งสองอย่าง (คัดกรองครบ ไม่ตกหล่น lactation)
+      is_lactating: data.is_lactating ?? data.is_pregnant ?? cur.patient.is_lactating,
       allergies,
       diseases,
     })
@@ -181,6 +195,7 @@ export default function ScreeningPage() {
     try {
       const ref = await logDispensing({
         hn: patient.hn,
+        an: patient.an,
         patient_name: patient.patient_name,
         age: patient.age,
         weight: patient.weight,
@@ -189,6 +204,7 @@ export default function ScreeningPage() {
         is_pregnant: patient.is_pregnant,
         drugs: drugs.map((d) => ({ icode: d.icode, drug_name: d.drug_name, sig: d.sig })),
         alerts_count: alerts.length,
+        ...alertSummary(alerts),
         ddi_count: alerts.filter((a) => a.type === 'DDI').length,
         drp_count: alerts.filter((a) => a.type === 'DRP').length,
         ai_summary: aiText,

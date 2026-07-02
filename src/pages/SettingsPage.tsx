@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Eye, EyeOff, KeyRound, Save } from 'lucide-react'
+import { Eye, EyeOff, KeyRound, Save, X, Plus } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
 import { getAnthropicConfig } from '@/features/ai/summary'
 import { saveConfig } from '@/features/catalog/api'
 import { doc, getDoc } from 'firebase/firestore'
@@ -26,8 +27,15 @@ function SettingsContent() {
   const [hospitalName, setHospitalName] = useState('โรงพยาบาลรือเสาะ')
   const [hospitalAddress, setHospitalAddress] = useState('')
   const [expensiveThreshold, setExpensiveThreshold] = useState('')
-  const [dupClasses, setDupClasses] = useState('')
+  const [dupList, setDupList] = useState<string[]>([])
+  const [dupInput, setDupInput] = useState('')
   const [saving, setSaving] = useState(false)
+
+  function addDupClass(raw: string) {
+    const v = raw.trim().toUpperCase()
+    if (v && !dupList.includes(v)) setDupList((p) => [...p, v])
+    setDupInput('')
+  }
 
   useEffect(() => {
     (async () => {
@@ -46,7 +54,7 @@ function SettingsContent() {
           const t = scrSnap.data().expensive_unit_price_threshold
           if (typeof t === 'number') setExpensiveThreshold(String(t))
           const dc = scrSnap.data().duplicate_classes
-          if (Array.isArray(dc)) setDupClasses(dc.join(', '))
+          if (Array.isArray(dc)) setDupList(dc.map((s: string) => String(s).trim().toUpperCase()).filter(Boolean))
         }
       } catch (e) {
         console.error(e)
@@ -63,7 +71,7 @@ function SettingsContent() {
       await saveConfig('screening', {
         // 0 = ปิดการเช็คตามราคา (เช็คเฉพาะบัญชี ง/จ)
         expensive_unit_price_threshold: expensiveThreshold.trim() !== '' && Number.isFinite(thr) && thr > 0 ? thr : 0,
-        duplicate_classes: dupClasses.split(',').map((s) => s.trim()).filter(Boolean),
+        duplicate_classes: dupList,
       })
       toast.success('บันทึกการตั้งค่าเรียบร้อย')
     } catch (e) {
@@ -121,16 +129,36 @@ function SettingsContent() {
         <CardHeader>
           <CardTitle>เกณฑ์ยาราคาสูง (Cost alert)</CardTitle>
           <CardDescription>
-            ตอนคัดกรอง ถ้ายามีราคาต่อหน่วย (ขาย/ทุน) ≥ ค่านี้ จะขึ้นแจ้งเตือน 💰 — เว้นว่างหรือ 0 = เช็คเฉพาะบัญชียา ง/จ
+            ถ้ายามีราคาต่อหน่วย (ขาย/ทุน) ≥ ค่านี้ จะขึ้นเตือน 💰 ตอนคัดกรอง — เลือกปุ่มด่วน หรือพิมพ์เอง
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <Label>ราคาต่อหน่วยที่ถือว่าแพง (บาท)</Label>
-          <Input
-            type="number" min={0} value={expensiveThreshold}
-            onChange={(e) => setExpensiveThreshold(e.target.value)}
-            placeholder="เช่น 50"
-          />
+        <CardContent className="space-y-3">
+          {/* ปุ่มเลือกด่วน — แตะเลือกได้เลย ไม่ต้องพิมพ์ */}
+          <div className="flex flex-wrap gap-2">
+            {['0', '20', '50', '100', '200', '500'].map((v) => {
+              const active = (expensiveThreshold.trim() === '' ? '0' : expensiveThreshold.trim()) === v
+              return (
+                <Button
+                  key={v}
+                  type="button"
+                  variant={active ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setExpensiveThreshold(v)}
+                >
+                  {v === '0' ? 'ปิด (เฉพาะ ง/จ)' : `≥ ${v} บาท`}
+                </Button>
+              )
+            })}
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground">หรือระบุเอง (บาท)</Label>
+            <Input
+              type="number" min={0} value={expensiveThreshold}
+              onChange={(e) => setExpensiveThreshold(e.target.value)}
+              placeholder="เช่น 75"
+              className="max-w-[160px]"
+            />
+          </div>
         </CardContent>
       </Card>
 
@@ -138,17 +166,46 @@ function SettingsContent() {
         <CardHeader>
           <CardTitle>กลุ่มยาที่ห้ามจ่ายซ้ำ (Duplicate)</CardTitle>
           <CardDescription>
-            ใส่ชื่อ drug_class ที่ห้ามซ้ำ คั่นด้วย , — ตอนคัดกรองจะเตือน "ยาซ้ำกลุ่ม" เฉพาะกลุ่มเหล่านี้
-            (เว้นว่าง = เตือนทุกกลุ่มเหมือนเดิม). ยาซ้ำ generic จะเตือนเสมอ
+            เตือน "ยาซ้ำกลุ่ม" เฉพาะกลุ่มที่ระบุ (ว่าง = เตือนทุกกลุ่ม) · ยาซ้ำ generic เตือนเสมอ
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <Label>กลุ่มที่ห้ามซ้ำ</Label>
-          <Input
-            value={dupClasses}
-            onChange={(e) => setDupClasses(e.target.value)}
-            placeholder="เช่น NSAIDS, PENICILLINS, PROTON PUMP INHIBITORS"
-          />
+        <CardContent className="space-y-3">
+          {/* chip กลุ่มที่เลือกไว้ — กด × เพื่อลบ */}
+          <div className="flex flex-wrap gap-1.5 min-h-[2rem]">
+            {dupList.length === 0 && <span className="text-sm text-muted-foreground italic">ยังไม่ได้เลือก — เตือนทุกกลุ่ม</span>}
+            {dupList.map((c) => (
+              <Badge key={c} variant="secondary" className="gap-1 pr-1">
+                {c}
+                <button type="button" onClick={() => setDupList((p) => p.filter((x) => x !== c))} className="hover:text-red-500" aria-label={`ลบ ${c}`}>
+                  <X className="size-3" />
+                </button>
+              </Badge>
+            ))}
+          </div>
+          {/* พิมพ์เพิ่ม (Enter/comma) */}
+          <div className="flex gap-2">
+            <Input
+              value={dupInput}
+              onChange={(e) => setDupInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addDupClass(dupInput) } }}
+              placeholder="พิมพ์ชื่อกลุ่มแล้วกด Enter เช่น NSAIDS"
+              className="flex-1"
+            />
+            <Button type="button" variant="outline" size="icon" onClick={() => addDupClass(dupInput)} disabled={!dupInput.trim()}>
+              <Plus className="size-4" />
+            </Button>
+          </div>
+          {/* กลุ่มยอดนิยม — แตะเพิ่มเร็ว */}
+          <div className="flex flex-wrap gap-1.5">
+            <span className="text-xs text-muted-foreground self-center">แนะนำ:</span>
+            {['NSAIDS', 'PENICILLINS', 'PROTON PUMP INHIBITORS', 'BENZODIAZEPINES', 'OPIOIDS', 'STATINS']
+              .filter((c) => !dupList.includes(c))
+              .map((c) => (
+                <button key={c} type="button" onClick={() => addDupClass(c)} className="text-xs px-2 py-0.5 rounded-full border border-dashed hover:bg-muted transition-colors">
+                  + {c}
+                </button>
+              ))}
+          </div>
         </CardContent>
       </Card>
 
