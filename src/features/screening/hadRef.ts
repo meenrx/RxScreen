@@ -225,6 +225,12 @@ for (const r of HAD_REF) {
 }
 
 /** หา HAD ref จาก generic/ชื่อยา (substring match — ชื่อยาวสุดก่อน) */
+/** match key แบบ "ทั้งคำ" (word boundary) — กัน 'ri' (insulin) ไปโดน "warfaRIn" */
+function wordMatch(hay: string, key: string): boolean {
+  const k = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`(^|[^a-z0-9])${k}([^a-z0-9]|$)`, 'i').test(hay)
+}
+
 export function findHadRef(generic?: string, drugName?: string): HadRef | undefined {
   const hay = `${generic ?? ''} ${drugName ?? ''}`.toLowerCase()
   if (!hay.trim()) return undefined
@@ -233,7 +239,8 @@ export function findHadRef(generic?: string, drugName?: string): HadRef | undefi
   let best: HadRef | undefined
   let bestLen = 0
   for (const [key, ref] of HAD_INDEX) {
-    if (hay.includes(key) && key.length > bestLen) { best = ref; bestLen = key.length }
+    // ต้องตรงทั้งคำ + key ยาว ≥ 3 (กันคำสั้นชนกลางคำ) — เลือก key ที่ยาวสุด
+    if (key.length >= 3 && key.length > bestLen && wordMatch(hay, key)) { best = ref; bestLen = key.length }
   }
   return best
 }

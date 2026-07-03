@@ -275,7 +275,7 @@ export function buildRenalAlerts(drugs: DrugEntry[], patient: PatientInput): Scr
       detail: `${label} = ${gfr} mL/min — เกณฑ์: ${formatDoseMetaForDisplay(rule.dose_meta)}`,
       drugs: [drug.icode],
       source: rule,
-      recommendation: action,
+      recommendation: `${action}  ·  ${label} ${gfr}`,   // โชว์ค่าไตข้างขนาดยา
     })
   }
   return alerts
@@ -343,7 +343,7 @@ export function buildRenalRefAlerts(drugs: DrugEntry[], patient: PatientInput, s
       title: `${isHardStop ? '🚫' : '⚠️'} ${drug.master?.drug_name ?? drug.icode} — ปรับขนาดตามไต (${g.label} ${g.gfr})${wtCalc}`,
       detail: detailParts.join(' · ') + ` · อ้างอิง ${ref.source} — ตรวจสอบก่อนจ่าย`,
       drugs: [drug.icode],
-      recommendation: band?.text ?? `ปรับขนาดเมื่อ ${g.label} < ${ref.threshold}`,
+      recommendation: `${band?.text ?? `ปรับขนาดเมื่อ ${g.label} < ${ref.threshold}`}  ·  ${g.label} ${g.gfr}`,
     })
   }
   return alerts
@@ -609,8 +609,10 @@ export function buildHadAlerts(drugs: DrugEntry[], hadRules: HadRule[] = []): Sc
     const nameLower = (d.master.drug_name ?? '').toLowerCase()
     const genericLower = (d.master.generic_name ?? '').toLowerCase()
     const rule = hadRules.find((r) => {
-      const k = r.drug_key.toLowerCase()
-      return nameLower.includes(k) || genericLower.includes(k)
+      const k = r.drug_key.trim().toLowerCase()
+      if (k.length < 3) return genericLower === k || nameLower === k  // คำสั้น → ต้องตรงเป๊ะ
+      const re = new RegExp(`(^|[^a-z0-9])${k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^a-z0-9]|$)`, 'i')
+      return re.test(genericLower) || re.test(nameLower)
     })
     if (!d.master.is_HAD && !rule) continue
 

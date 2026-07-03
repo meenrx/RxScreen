@@ -44,6 +44,20 @@ function actionText(a: ScreeningAlert): string {
   return a.recommendation || a.detail.split('\n')[0] || a.title
 }
 
+/** ไอคอนไต (SVG) — ชัดเจนกว่า emoji ถั่ว */
+function KidneyIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-label="ไต" role="img">
+      <path d="M15.5 2C11 2 8 5.5 8 10c0 1.8.6 3 1.2 4.2.5 1 1 1.9 1 3.3 0 1.4-.9 2.5-2.2 2.5C5.7 22 3.5 19 3.5 15 3.5 8 8 3 14 3c2.2 0 4 .8 5.2 2.2.5.6-.1 1.5-.9 1.4C16.8 4.5 15.6 4 14.2 4" />
+    </svg>
+  )
+}
+/** แสดงสัญลักษณ์ชนิด alert — RENAL ใช้รูปไต SVG, ที่เหลือใช้ emoji */
+function TypeGlyph({ type, className }: { type: AlertType; className?: string }) {
+  if (type === 'RENAL') return <KidneyIcon className={cn('inline align-[-2px] size-[1.05em] text-rose-500', className)} />
+  return <span>{TYPE_META[type].emoji}</span>
+}
+
 export function DrugResultView({ drugs, alerts }: { drugs: DrugEntry[]; alerts: ScreeningAlert[] }) {
   if (alerts.length === 0) {
     return (
@@ -97,7 +111,7 @@ export function DrugResultView({ drugs, alerts }: { drugs: DrugEntry[]; alerts: 
             {crossAll.map((a) => (
               <div key={a.id} className={cn('rounded-xl border p-2.5', `alert-${a.severity}`)}>
                 <div className="flex items-start gap-2">
-                  <span className="shrink-0">{TYPE_META[a.type].emoji}</span>
+                  <span className="shrink-0"><TypeGlyph type={a.type} /></span>
                   <div className="flex-1 min-w-0">
                     <div className="font-semibold text-sm leading-snug">{a.title}</div>
                     {a.recommendation
@@ -129,7 +143,7 @@ export function DrugResultView({ drugs, alerts }: { drugs: DrugEntry[]; alerts: 
 }
 
 function DrugCard({ drug, list }: { drug: DrugEntry; list: ScreeningAlert[] }) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(true)  // แสดงรายละเอียดเลย ไม่ต้องกด
   const sorted = [...list].sort((a, b) => sevRank(a.severity) - sevRank(b.severity))
   const worst = worstSev(sorted)
   const types = [...new Set(sorted.map((a) => a.type))]
@@ -143,8 +157,8 @@ function DrugCard({ drug, list }: { drug: DrugEntry; list: ScreeningAlert[] }) {
         {drug.master?.strength && <span className="text-[11px] text-muted-foreground shrink-0">{drug.master.strength}</span>}
         <div className="ml-auto flex flex-wrap gap-1 justify-end">
           {types.map((t) => (
-            <span key={t} className="text-[11px] px-1.5 py-0.5 rounded-full border bg-card/70 whitespace-nowrap">
-              {TYPE_META[t].emoji} {TYPE_META[t].label}
+            <span key={t} className="text-[11px] px-1.5 py-0.5 rounded-full border bg-card/70 whitespace-nowrap inline-flex items-center gap-0.5">
+              <TypeGlyph type={t} /> {TYPE_META[t].label}
             </span>
           ))}
         </div>
@@ -154,7 +168,7 @@ function DrugCard({ drug, list }: { drug: DrugEntry; list: ScreeningAlert[] }) {
       <div className="px-3 pb-2 space-y-1">
         {sorted.map((a) => (
           <div key={a.id} className="flex gap-1.5 text-sm">
-            <span className="shrink-0">{TYPE_META[a.type].emoji}</span>
+            <span className="shrink-0"><TypeGlyph type={a.type} /></span>
             <span className={cn('min-w-0', a.recommendation ? 'font-semibold' : 'text-muted-foreground')}>
               {actionText(a)}
             </span>
