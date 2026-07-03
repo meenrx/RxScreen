@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Scanner, type IDetectedBarcode } from '@yudiel/react-qr-scanner'
-import { ScanLine, X, Type, CheckCircle2 } from 'lucide-react'
+import { ScanLine, X, Type, CheckCircle2, Upload } from 'lucide-react'
+import { BarcodeDetector } from 'barcode-detector/ponyfill'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
@@ -116,6 +117,23 @@ export function QrScannerModal({ open, onOpenChange, onScan }: Props) {
     }
   }
 
+  /** อ่าน QR จากไฟล์รูป (decode ในเครื่อง ผ่าน barcode-detector — ไม่ต้องมีเครื่องสแกน) */
+  async function handleImageFile(file: File | undefined) {
+    if (!file) return
+    try {
+      const detector = new BarcodeDetector({ formats: ['qr_code'] })
+      const bitmap = await createImageBitmap(file)
+      const codes = await detector.detect(bitmap)
+      bitmap.close?.()
+      if (!codes.length) { setError('ไม่พบ QR code ในรูป — ลองใช้รูปที่ชัด/ครอบเฉพาะ QR'); return }
+      const added = addPayload(codes[0].rawValue)
+      setError(null)
+      if (added) onOpenChange(false)
+    } catch (e) {
+      setError('อ่านรูปไม่สำเร็จ: ' + (e as Error).message)
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md p-0 overflow-hidden">
@@ -128,6 +146,7 @@ export function QrScannerModal({ open, onOpenChange, onScan }: Props) {
         <Tabs defaultValue="camera">
           <TabsList className="mx-4 mb-2">
             <TabsTrigger value="camera"><ScanLine className="size-4" /> กล้อง</TabsTrigger>
+            <TabsTrigger value="image"><Upload className="size-4" /> รูป QR</TabsTrigger>
             <TabsTrigger value="manual"><Type className="size-4" /> วาง/พิมพ์</TabsTrigger>
           </TabsList>
 
@@ -146,6 +165,16 @@ export function QrScannerModal({ open, onOpenChange, onScan }: Props) {
               <div className="absolute inset-8 border-4 border-emerald-400/80 rounded-2xl pointer-events-none animate-pulse" />
             </div>
             <p className="text-xs text-center text-muted-foreground p-3">เล็ง QR ให้อยู่ในกรอบสีเขียว — สแกนได้หลายสติ๊กเกอร์ต่อเนื่อง</p>
+          </TabsContent>
+
+          <TabsContent value="image" className="px-4 pb-4 space-y-3">
+            <p className="text-sm text-muted-foreground">เลือกไฟล์รูป QR (ถ่ายภาพ/แคปหน้าจอ) — decode ในเครื่อง ไม่ต้องมีเครื่องสแกน</p>
+            <label className="flex flex-col items-center gap-2 border-2 border-dashed rounded-xl p-6 cursor-pointer hover:bg-accent transition">
+              <Upload className="size-8 text-muted-foreground" />
+              <span className="text-sm font-medium">เลือกรูป QR</span>
+              <span className="text-xs text-muted-foreground">.jpg .png — ครอบเฉพาะ QR จะแม่นสุด</span>
+              <input type="file" accept="image/*" className="hidden" onChange={(e) => { handleImageFile(e.target.files?.[0]); e.currentTarget.value = '' }} />
+            </label>
           </TabsContent>
 
           <TabsContent value="manual" className="px-4 pb-4 space-y-2">
