@@ -185,6 +185,29 @@ export function buildQrRuleAlerts(drugs: DrugEntry[], p: PatientInput): Screenin
     if (cns.length >= 2) push({ id: 'qr_cns', type: 'BEERS', severity: 'orange', title: `💤 ยากดประสาท ${cns.length} ตัว + สูงอายุ`, detail: `${names(cns)} → เสี่ยง over-sedation/หกล้ม`, recommendation: 'ลดจำนวน/ขนาดยากดประสาท', drugs: icodes(cns) })
   }
 
+  // ===== Care gap — ค่าแล็บผิดปกติ แต่ยังไม่มียาที่ควรได้ (untreated indication) =====
+  // K ต่ำ + ยังไม่มี KCl/K supplement (kalimate = ยาลด K ไม่นับ)
+  const hasKSupp = inGroup(drugs, /potassium\s*chlor|\bkcl\b|k\.?c\.?l|potassium\s*(gluconate|citrate|bicarb)|เกลือแร่โพแทส/).length > 0
+  if (labs.k !== undefined && labs.k < 3.5 && !hasKSupp) {
+    push({ id: 'qr_gap_kcl', type: 'OMIT', severity: labs.k < 3.0 ? 'orange' : 'yellow', title: `💊 K⁺ ต่ำ (${labs.k}) แต่ยังไม่มียาโพแทสเซียม`, detail: `ควรพิจารณาให้ KCl / K supplement ทดแทน${staleNote(p, 'k')}`, recommendation: 'พิจารณาเพิ่ม KCl (ปรับตามระดับ K + การทำงานของไต + ทางให้ยา)', drugs: [] })
+  }
+  // Mg ต่ำ + ยังไม่มี Mg
+  const hasMg = inGroup(drugs, /magnesium|แมกนีเซียม/).length > 0
+  if (labs.mg !== undefined && labs.mg < 1.7 && !hasMg) {
+    push({ id: 'qr_gap_mg', type: 'OMIT', severity: 'yellow', title: `💊 Mg ต่ำ (${labs.mg}) แต่ยังไม่มี Mg`, detail: `ควรพิจารณาให้ magnesium ทดแทน (โดยเฉพาะถ้า K ต่ำร่วมด้วย)${staleNote(p, 'mg')}`, recommendation: 'พิจารณาเพิ่ม magnesium', drugs: [] })
+  }
+  // เบาหวานคุมไม่ได้ แต่ยังไม่มียาเบาหวานเลย
+  const antidiab = /metformin|glipizide|glibenclamide|glyburide|gliclazide|glimepiride|insulin|pioglitazone|rosiglitazone|sitagliptin|vildagliptin|linagliptin|saxagliptin|gliptin|empagliflozin|dapagliflozin|canagliflozin|gliflozin|acarbose|voglibose/
+  const hasAntidiab = inGroup(drugs, antidiab).length > 0
+  if (!hasAntidiab && ((labs.hba1c !== undefined && labs.hba1c > 9) || (labs.fbs !== undefined && labs.fbs > 250))) {
+    push({ id: 'qr_gap_dm', type: 'OMIT', severity: 'yellow', title: '💊 น้ำตาลสูงแต่ยังไม่มียาเบาหวาน', detail: `${labs.hba1c !== undefined ? `HbA1c ${labs.hba1c}% ` : ''}${labs.fbs !== undefined ? `FBS ${labs.fbs} ` : ''}— ควรพิจารณาเริ่มการรักษาเบาหวาน`, recommendation: 'ทบทวนแผนการรักษาเบาหวาน', drugs: [] })
+  }
+  // K สูงมาก แต่ยังไม่มี treatment ลด K
+  const hasKLower = inGroup(drugs, /kalimate|polystyrene|calcium\s*gluconate|sodium\s*bicarb|dextrose|insulin/).length > 0
+  if (labs.k !== undefined && labs.k > 6.0 && !hasKLower) {
+    push({ id: 'qr_gap_hyperk', type: 'OMIT', severity: 'orange', title: `💊 K⁺ สูงวิกฤต (${labs.k}) แต่ยังไม่มี treatment ลด K`, detail: `ควรพิจารณา kalimate / calcium gluconate / insulin+glucose${staleNote(p, 'k')}`, recommendation: 'จัดการ hyperkalemia ตาม protocol', drugs: [] })
+  }
+
   return a
 }
 

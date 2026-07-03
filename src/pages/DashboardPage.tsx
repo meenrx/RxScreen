@@ -367,6 +367,7 @@ const ALERT_TYPE_LABELS: Record<string, { label: string; tone: IssueTone }> = {
   LASA: { label: 'ชื่อคล้าย (LASA)', tone: 'violet' },
   DRP: { label: 'ยาซ้ำซ้อน', tone: 'violet' },
   LAB: { label: 'ค่าแล็บ', tone: 'cyan' },
+  OMIT: { label: 'ควรได้รับยาเพิ่ม', tone: 'violet' },
   TDM: { label: 'TDM', tone: 'cyan' },
   NO_CRUSH: { label: 'ห้ามบด', tone: 'yellow' },
   FOOD: { label: 'อาหาร', tone: 'yellow' },

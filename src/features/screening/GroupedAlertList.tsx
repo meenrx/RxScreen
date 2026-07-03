@@ -18,6 +18,7 @@ const CATEGORIES: { type: AlertType; label: string; emoji: string }[] = [
   { type: 'DRP', label: 'ยาซ้ำ (Duplicate)', emoji: '🔁' },
   { type: 'COST', label: 'ยาราคาสูง (Cost)', emoji: '💰' },
   { type: 'SUBST', label: 'ยาเปลี่ยนบริษัท (Substitution)', emoji: '🔄' },
+  { type: 'OMIT', label: 'ควรได้รับยาเพิ่ม (Care gap)', emoji: '💊' },
   { type: 'LAB', label: 'ค่า LAB ที่ต้อง monitor', emoji: '📋' },
   { type: 'DISEASE', label: 'โรคประจำตัว', emoji: '🏥' },
   { type: 'PED', label: 'ขนาดยาเด็ก (Pediatric)', emoji: '👶' },

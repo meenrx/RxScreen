@@ -34,6 +34,7 @@ const labelByType: Record<ScreeningAlert['type'], string> = {
   COST: 'ยาแพง',
   SUBST: 'เปลี่ยนบริษัท',
   RDU: 'RDU',
+  OMIT: 'ควรได้เพิ่ม',
 }
 
 export function AlertList({ alerts }: { alerts: ScreeningAlert[] }) {

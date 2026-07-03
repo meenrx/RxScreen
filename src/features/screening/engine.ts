@@ -101,11 +101,35 @@ export function buildLabAlerts(drugs: DrugEntry[], labRules: LabRule[], patient:
     ).map((r) => r.id).filter((id): id is string => !!id))
     const rules = allRulesForDrug.filter((r) => !r.indication?.trim() || (r.id && allowedIds.has(r.id)))
     for (const r of rules) {
+      const sev: ScreeningAlert['severity'] = r.priority === 'high' ? 'red' : r.priority === 'medium' ? 'orange' : 'yellow'
+
+      // เงื่อนไขแจ้งเตือนแบบ operator (admin ตั้งใน Lab/Dose) — เช่น ">5.5:K สูง"
+      // เทียบค่า lab ของผู้ป่วยกับเงื่อนไข → เตือนด้วยข้อความ action ที่ตั้งไว้
+      if (r.alert_meta) {
+        const v = readPatientLab(patient, r.param)
+        if (v !== undefined) {
+          const action = findMatchingDoseAction(r.alert_meta, v)
+          if (action) {
+            const hard = /ห้าม|หยุด|อันตราย|วิกฤต|contraindicat|stop/i.test(action)
+            alerts.push({
+              id: `labalert_${drug.icode}_${r.param}_${r.id ?? ''}`,
+              type: 'LAB',
+              severity: hard ? 'red' : sev,
+              title: `📋 ${drug.master?.drug_name ?? drug.icode} — ${r.param ?? ''} = ${v}: ${action}`,
+              detail: [r.normal_range ? `ค่าปกติ: ${r.normal_range} ${r.unit ?? ''}` : null, r.reason].filter(Boolean).join(' · '),
+              recommendation: action,
+              drugs: [drug.icode],
+              source: r,
+            })
+          }
+        }
+        continue // ใช้ alert_meta เป็นหลักสำหรับ rule นี้ (ไม่ต้องเช็ค normal_range ซ้ำ)
+      }
+
       // ข้าม rule ที่เป็น "renal dose adjustment" — จะไป trigger RENAL alert แยก
       // ไม่งั้นเด้ง LAB monitor ซ้ำซ้อนกับ RENAL ที่บอก action แล้ว
       if (r.dose_meta) continue
 
-      const sev: ScreeningAlert['severity'] = r.priority === 'high' ? 'red' : r.priority === 'medium' ? 'orange' : 'yellow'
       const paramValue = readPatientLab(patient, r.param)
       const inRange = isInNormalRange(paramValue, r.normal_range)
       const outOfRange = paramValue !== undefined && inRange === false

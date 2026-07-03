@@ -109,6 +109,10 @@ export interface LabRule {
   /** flag "1"/"0" — ต้องการ dose check */
   dose_check?: string
   dose_meta?: string
+  /** เงื่อนไขแจ้งเตือนตามค่า lab (operator-based เหมือน dose_meta) สำหรับยาตัวนี้
+   *  เช่น ">5.5:K สูง — ระวัง arrhythmia; <3.5:K ต่ำ — พิจารณาให้ KCl"
+   *  ระบบจะเทียบค่า lab (param) ของผู้ป่วยกับเงื่อนไข แล้วเตือนด้วยข้อความ action */
+  alert_meta?: string
   renal_dose_rules?: string
   /** ฐานการปรับ dose ตามไต: 'crcl' = คำนวณ Cockcroft-Gault (ขอ age/weight/sex/scr),
    *  'egfr' = ให้ผู้ใช้กรอก eGFR ตรง ๆ. ไม่ระบุ = เดาจาก dose_meta/param (default crcl) */

@@ -126,34 +126,38 @@ export default function ScreeningPage() {
 
     // 2) ใส่ยา (ที่จับคู่ได้ทันที) + ข้อมูลคนไข้เข้า store เดี๋ยวนั้น → chips + ฟอร์มโผล่เลย
     const cur = useScreeningStore.getState()
-    if (inMemory.length > 0) setDrugs([...cur.drugs, ...inMemory])
-    // รวมค่าที่ติดมากับ QR เข้ากับของเดิม (dedupe ไม่ทับ)
+    // QR ผู้ป่วยเต็มใบ (มี AN/อายุ/แล็บ/โรค) = ผู้ป่วยรายใหม่ → ล้างของเดิม ใช้เฉพาะข้อมูลรอบนี้
+    // (สติ๊กเกอร์ยาเดี่ยวที่ไม่มีข้อมูลผู้ป่วย → ยังสะสมต่อได้)
+    const fullPatient = !!data.an || data.age !== undefined || !!data.labs || !!data.diseases?.length || data.sex !== undefined
+    const basePatient: typeof cur.patient = fullPatient ? {} : cur.patient
+    const baseDrugs = fullPatient ? [] : cur.drugs
+    if (fullPatient) { setSelectedDiseases(data.diseases ?? []); setLabValues({}); setAiText('') }
+    if (fullPatient || inMemory.length > 0) setDrugs([...baseDrugs, ...inMemory])
     const allergies = data.allergies?.length
-      ? Array.from(new Set([...(cur.patient.allergies ?? []), ...data.allergies]))
-      : cur.patient.allergies
+      ? Array.from(new Set([...(basePatient.allergies ?? []), ...data.allergies]))
+      : basePatient.allergies
     const diseases = data.diseases?.length
-      ? Array.from(new Set([...(cur.patient.diseases ?? []), ...data.diseases]))
-      : cur.patient.diseases
-    const labs = data.labs ? { ...(cur.patient.labs ?? {}), ...data.labs } : cur.patient.labs
-    const labDates = data.labDates ? { ...(cur.patient.labDates ?? {}), ...data.labDates } : cur.patient.labDates
+      ? Array.from(new Set([...(basePatient.diseases ?? []), ...data.diseases]))
+      : basePatient.diseases
+    const labs = data.labs ? { ...(basePatient.labs ?? {}), ...data.labs } : basePatient.labs
+    const labDates = data.labDates ? { ...(basePatient.labDates ?? {}), ...data.labDates } : basePatient.labDates
     setPatient({
-      ...cur.patient,
-      an: data.an ?? cur.patient.an,
-      hn: data.hn ?? cur.patient.hn,
-      patient_name: data.patient_name ?? cur.patient.patient_name,
-      age: data.age ?? cur.patient.age,
-      sex: data.sex ?? cur.patient.sex,
-      weight: data.weight ?? cur.patient.weight,
-      scr: data.scr ?? cur.patient.scr,
-      egfr: data.crcl ?? cur.patient.egfr,
-      inr: data.inr ?? cur.patient.inr,
+      ...basePatient,
+      an: data.an ?? basePatient.an,
+      hn: data.hn ?? basePatient.hn,
+      patient_name: data.patient_name ?? basePatient.patient_name,
+      age: data.age ?? basePatient.age,
+      sex: data.sex ?? basePatient.sex,
+      weight: data.weight ?? basePatient.weight,
+      scr: data.scr ?? basePatient.scr,
+      egfr: data.crcl ?? basePatient.egfr,
+      inr: data.inr ?? basePatient.inr,
       labs,
       labDates,
-      g6pd: data.g6pd ?? cur.patient.g6pd,
-      g6pd_tested: data.g6pd_tested ?? cur.patient.g6pd_tested,
-      is_pregnant: data.is_pregnant ?? cur.patient.is_pregnant,
-      // QR field "Pg" รวมตั้งครรภ์+ให้นม → Y ถือว่าเสี่ยงทั้งสองอย่าง (คัดกรองครบ ไม่ตกหล่น lactation)
-      is_lactating: data.is_lactating ?? data.is_pregnant ?? cur.patient.is_lactating,
+      g6pd: data.g6pd ?? basePatient.g6pd,
+      g6pd_tested: data.g6pd_tested ?? basePatient.g6pd_tested,
+      is_pregnant: data.is_pregnant ?? basePatient.is_pregnant,
+      is_lactating: data.is_lactating ?? data.is_pregnant ?? basePatient.is_lactating,
       allergies,
       diseases,
     })
@@ -197,7 +201,7 @@ export default function ScreeningPage() {
     if (inMemory.length === 0 && fetchedEntries.length === 0 && notFound.length === 0) {
       toast.warning('อ่าน QR ได้ แต่ไม่พบรายการยาในข้อมูล — ตรวจรูปแบบ QR หรือใช้ช่อง "วาง/พิมพ์"')
     }
-  }, [drugMasters, setDrugs, setPatient, setSelectedDiseases])
+  }, [drugMasters, setDrugs, setPatient, setSelectedDiseases, setLabValues, setAiText])
 
   // สแกน QR ด้วยเครื่องสแกนที่คอม (คีย์บอร์ด) — payload เข้าช่องพิมพ์ยา → parse เป็น QR
   const onQrText = useCallback((raw: string) => {

@@ -56,6 +56,8 @@ export type AlertType =
   | 'ALLERGY' | 'HAD' | 'LASA' | 'PREG' | 'LACT' | 'BEERS' | 'G6PD'
   | 'FOOD' | 'SMOKING' | 'ALCOHOL' | 'TDM'
   | 'TIMING' | 'DUE' | 'NO_CRUSH' | 'COST' | 'SUBST' | 'RDU'
+  /** ควรได้รับยาเพิ่ม (untreated indication / care gap) เช่น K ต่ำ ควรได้ KCl */
+  | 'OMIT'
 
 export interface ScreeningAlert {
   id: string

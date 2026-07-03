@@ -405,6 +405,20 @@ export function LabRuleAdmin() {
                 />
               </div>
 
+              {/* แจ้งเตือนตามค่า lab (operator-based) */}
+              <div className="rounded-xl border p-3 space-y-2 bg-muted/20">
+                <div className="text-sm font-semibold flex items-center gap-2">🔔 แจ้งเตือนตามค่า {edit.param || 'lab'} ของยานี้</div>
+                <p className="text-xs text-muted-foreground">
+                  ตั้งเงื่อนไข &gt;/&lt;/= เท่าไหร่จึงเตือน เช่น ถ้า {edit.param || 'ค่า'} &gt; 5.5 → "K สูง ระวัง arrhythmia" ·
+                  ข้อความจะโชว์เป็นคำเตือน/คำแนะนำตอนคัดกรอง (มีคำว่า "ห้าม/หยุด/อันตราย/วิกฤต" = เตือนสีแดง)
+                </p>
+                <DoseMetaBuilder
+                  value={edit.alert_meta}
+                  onChange={(v) => setEdit({ ...edit, alert_meta: v })}
+                  basisLabel={edit.param || 'ค่า'}
+                />
+              </div>
+
               {/* Pediatric / dose limits */}
               <div className="rounded-xl border p-3 space-y-3 bg-muted/20">
                 <div className="text-sm font-semibold flex items-center gap-2">
