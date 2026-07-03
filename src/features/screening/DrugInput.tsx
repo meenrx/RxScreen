@@ -73,7 +73,11 @@ export function DrugInput({ drugs, onChange, drugMasters = [], onQrPayload }: Pr
     qrTimer.current = window.setTimeout(() => { maybeHandleQr(value) }, 150)
   }
 
+  // กำลังสแกน QR (มี | หรือ ฅ=|ภาษาไทย ซึ่งชื่อยาไม่มี) → ข้าม suggestion ทั้งหมด กัน re-render หน่วงตอนสแกน
+  const scanning = query.includes('|') || query.includes('ฅ')
+
   const suggestions = useMemo(() => {
+    if (scanning) return []   // ระหว่างสแกน QR ไม่ต้อง filter ยา 500+ ตัวทุกตัวอักษร
     const q = query.trim().toLowerCase()
     if (q.length === 0) return []
     const filtered = drugMasters.filter((d) =>
@@ -89,7 +93,7 @@ export function DrugInput({ drugs, onChange, drugMasters = [], onQrPayload }: Pr
       return an - bn
     })
     return filtered.slice(0, MAX_SUGGESTIONS)
-  }, [query, drugMasters])
+  }, [query, drugMasters, scanning])
 
   useEffect(() => { setActiveIdx(0) }, [query])
 
@@ -157,7 +161,8 @@ export function DrugInput({ drugs, onChange, drugMasters = [], onQrPayload }: Pr
               onChange={(e) => {
                 const v = e.target.value
                 setQuery(v)
-                if (toQr(v)) { setShowList(false); scheduleQrCheck(v) }  // รอพิมพ์จบ (เครื่องสแกน) · แปลงไทยให้
+                // มี | หรือ ฅ = กำลังสแกน QR → ปิด dropdown ทันที (กัน filter หน่วง) + รอพิมพ์จบค่อยประมวลผล
+                if (v.includes('|') || v.includes('ฅ')) { setShowList(false); scheduleQrCheck(v) }
                 else setShowList(true)
               }}
               onPaste={(e) => { const t = e.clipboardData.getData('text'); if (toQr(t)) { e.preventDefault(); maybeHandleQr(t) } }}
