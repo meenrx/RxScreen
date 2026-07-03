@@ -130,14 +130,19 @@ export function buildQrRuleAlerts(drugs: DrugEntry[], p: PatientInput): Screenin
     push({ id: 'qr_aec_dress', type: 'ALLERGY', severity: 'orange', title: `AEC ${labs.aec} สูงมาก — สงสัย DRESS/แพ้ยา`, detail: `ทบทวนยาใหม่ทุกตัว (โดยเฉพาะ allopurinol/sulfa/anticonvulsant/vancomycin)${staleNote(p, 'aec')}`, recommendation: 'ประเมิน DRESS + หยุดยาต้องสงสัย', drugs: icodes(drugs) })
   }
 
-  // ---- 3.3 Diabetes ----
+  // ---- 3.3 Diabetes — รวม HbA1c + น้ำตาล เป็น card เดียว ----
   const su = inGroup(drugs, G.sulfonylurea)
   const ins = inGroup(drugs, G.insulin)
-  if (labs.hba1c !== undefined && labs.hba1c > 9) push({ id: 'qr_dm_a1c', type: 'LAB', severity: 'yellow', title: `HbA1c ${labs.hba1c}% > 9 — เบาหวานคุมไม่ได้`, detail: `ทบทวนยา/ความร่วมมือ${staleNote(p, 'hba1c')}`, drugs: icodes([...su, ...ins]) })
-  if (labs.fbs !== undefined) {
-    if (labs.fbs > 250) push({ id: 'qr_dm_hi', type: 'LAB', severity: 'yellow', title: `น้ำตาล ${labs.fbs} > 250 — คุมไม่ได้`, detail: `ทบทวนยาเบาหวาน${staleNote(p, 'fbs')}`, drugs: icodes([...su, ...ins]) })
-    else if (labs.fbs < 70 && (su.length || ins.length)) push({ id: 'qr_dm_hypo', type: 'LAB', severity: 'orange', title: `น้ำตาล ${labs.fbs} < 70 + ${su.length ? 'sulfonylurea' : 'insulin'}`, detail: `เสี่ยง hypoglycemia: ${names([...su, ...ins])}${(p.age ?? 0) >= 65 ? ' (สูงอายุ — ระวังมาก)' : ''}${staleNote(p, 'fbs')}`, recommendation: 'ระวัง/ลดขนาด โดยเฉพาะไตเสื่อม/สูงอายุ', drugs: icodes([...su, ...ins]) })
+  const dmDrugs = dedupe([...su, ...ins])
+  const a1cHi = labs.hba1c !== undefined && labs.hba1c > 9
+  const fbsHi = labs.fbs !== undefined && labs.fbs > 250
+  if (a1cHi || fbsHi) {
+    const parts: string[] = []
+    if (labs.hba1c !== undefined) parts.push(`HbA1c ${labs.hba1c}%`)
+    if (labs.fbs !== undefined) parts.push(`FBS ${labs.fbs}`)
+    push({ id: 'qr_dm', type: 'LAB', severity: 'yellow', title: `🩸 เบาหวานคุมไม่ได้ — ${parts.join(' · ')}`, detail: `เกินเป้า (HbA1c>9 / น้ำตาล>250) → ทบทวนยาเบาหวาน + ความร่วมมือ${staleNote(p, a1cHi ? 'hba1c' : 'fbs')}`, recommendation: 'ทบทวนแผนการรักษาเบาหวาน', drugs: icodes(dmDrugs) })
   }
+  if (labs.fbs !== undefined && labs.fbs < 70 && dmDrugs.length) push({ id: 'qr_dm_hypo', type: 'LAB', severity: 'orange', title: `⚠️ น้ำตาลต่ำ ${labs.fbs} < 70 + ${su.length ? 'sulfonylurea' : 'insulin'}`, detail: `เสี่ยง hypoglycemia: ${names(dmDrugs)}${(p.age ?? 0) >= 65 ? ' (สูงอายุ — ระวังมาก)' : ''}${staleNote(p, 'fbs')}`, recommendation: 'ระวัง/ลดขนาด โดยเฉพาะไตเสื่อม/สูงอายุ', drugs: icodes(dmDrugs) })
 
   // ---- 3.9 G6PD deficient + oxidant ----
   const g6pdDef = p.g6pd === true

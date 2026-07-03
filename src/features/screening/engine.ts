@@ -4,6 +4,7 @@ import { calcCrCl, findMatchingDoseAction, renalBasisOf, computePediatricDose } 
 import { buildRduAlerts } from './rduRules'
 import { buildQrRuleAlerts } from './qrRules'
 import { findRenalRef, pickRenalBand } from './renalDoseRef'
+import { findHadRef } from './hadRef'
 
 function nameEq(a: string | undefined, b: string | undefined): boolean {
   if (!a || !b) return false
@@ -134,22 +135,18 @@ export function buildLabAlerts(drugs: DrugEntry[], labRules: LabRule[], patient:
       const inRange = isInNormalRange(paramValue, r.normal_range)
       const outOfRange = paramValue !== undefined && inRange === false
 
-      // เกณฑ์แสดง alert:
-      //   - ค่าผิดปกติ (outOfRange) → แสดงเสมอ (สีแดง)
-      //   - ค่ายังไม่ได้กรอก + priority สูง → แสดง (เตือนให้กรอก)
-      //   - อื่น ๆ (ปกติ / ไม่มีเกณฑ์เทียบ / missing แต่ priority ไม่สูง) → ข้าม
-      const isMissingHighPrio = paramValue === undefined && r.priority === 'high'
-      if (!outOfRange && !isMissingHighPrio) continue
+      // เตือนเฉพาะเมื่อ "มีค่า และค่าผิดปกติจริง" — ไม่มีค่า/ในเกณฑ์ = ผ่าน (ไม่โชว์)
+      if (!outOfRange) continue
 
       alerts.push({
         id: `lab_${drug.icode}_${r.param}_${r.id ?? ''}`,
         type: 'LAB',
-        severity: outOfRange ? 'red' : sev,
-        title: `LAB monitor: ${drug.master?.drug_name ?? drug.icode} — ${r.param ?? '-'}${paramValue !== undefined ? ` = ${paramValue}` : ''}`,
+        severity: 'red',
+        title: `LAB monitor: ${drug.master?.drug_name ?? drug.icode} — ${r.param ?? '-'} = ${paramValue}`,
         detail: [
           r.normal_range ? `ค่าปกติ: ${r.normal_range} ${r.unit ?? ''}` : null,
           r.reason ? `เหตุผล: ${r.reason}` : null,
-          outOfRange ? '⚠ ค่าผิดปกติ' : 'ยังไม่ได้ใส่ค่า',
+          '⚠ ค่าผิดปกติ',
         ].filter(Boolean).join(' · '),
         drugs: [drug.icode],
         source: r,
@@ -613,22 +610,42 @@ export function buildHadAlerts(drugs: DrugEntry[], hadRules: HadRule[] = []): Sc
       return nameLower.includes(k) || genericLower.includes(k)
     })
     if (!d.master.is_HAD && !rule) continue
-    const ruleDetail = rule ? [
-      rule.full_note,
-      rule.max_dose && `Max dose: ${rule.max_dose}`,
-      rule.max_rate && `Max rate: ${rule.max_rate}`,
-      rule.max_conc && `Max conc: ${rule.max_conc}`,
-      rule.dilution,
-      rule.route_note,
-      rule.antidote && `Antidote: ${rule.antidote}`,
-    ].filter(Boolean).join(' · ') : 'ยานี้อยู่ในรายการ High Alert Drug — ต้อง double check ก่อนจ่าย'
+
+    // ฐานข้อมูล HAD (bundled) — จับด้วย generic (เสริมเมื่อไม่มี HadRule ที่ admin ตั้ง)
+    const ref = findHadRef(d.master.generic_name, d.master.drug_name)
+
+    // แสดงหลัก: Dose · วิธีเตรียม · max conc · max rate (ที่เหลืออยู่ในรายละเอียด)
+    const dose = rule?.max_dose ?? ref?.dose
+    const prep = rule?.dilution ?? ref?.prep
+    const maxConc = rule?.max_conc ?? ref?.maxConc
+    const maxRate = rule?.max_rate ?? ref?.maxRate
+    const primaryInline = [
+      dose && `💉 Dose: ${dose}`,
+      prep && `🧪 เตรียม: ${prep}`,
+      maxConc && `Max conc: ${maxConc}`,
+      maxRate && `Max rate: ${maxRate}`,
+    ].filter(Boolean).join('  ·  ')
+
+    const detail = [
+      dose && `💉 Dose: ${dose}`,
+      prep && `🧪 วิธีเตรียม: ${prep}`,
+      maxConc && `⚖️ Max conc: ${maxConc}`,
+      maxRate && `⏱️ Max rate: ${maxRate}`,
+      ref?.compatible && `✅ ผสมได้: ${ref.compatible}`,
+      rule?.route_note,
+      ref?.incompatible && `⛔ ห้ามผสม: ${ref.incompatible}`,
+      (rule?.antidote ?? ref?.antidote) && `💊 Antidote: ${rule?.antidote ?? ref?.antidote}`,
+      (rule?.full_note ?? ref?.note),
+      ref && `📚 อ้างอิง: ${ref.source} — ยืนยันกับ protocol รพ. ก่อนใช้`,
+    ].filter(Boolean).join('\n')
+
     alerts.push({
       id: `had_${d.icode}`,
       type: 'HAD' as const,
       severity: 'red' as const,
-      title: `🔴 HIGH ALERT DRUG: ${d.master.drug_name}`,
-      detail: ruleDetail,
-      recommendation: 'ตรวจสอบ dose / route / patient identity ซ้ำ (double-check)',
+      title: `🔴 HIGH ALERT: ${d.master.drug_name}`,
+      detail: detail || 'ยา High Alert — double check dose/route/identity ก่อนจ่าย',
+      recommendation: primaryInline || 'double-check dose / route / patient identity ก่อนจ่าย',
       drugs: [d.icode],
       source: rule ?? d.master,
     })
