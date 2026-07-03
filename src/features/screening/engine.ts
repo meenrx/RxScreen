@@ -257,6 +257,8 @@ export function buildRenalAlerts(drugs: DrugEntry[], patient: PatientInput): Scr
     const { gfr, label } = resolved
     const action = findMatchingDoseAction(rule.dose_meta, gfr)
     if (!action) continue
+    // ไม่ต้องปรับ (ไตปกติ/no adjust) → ไม่ต้องเตือน (ให้ยาอยู่กลุ่มเขียว "ผ่าน")
+    if (/no\s*adjust|ไม่ต้องปรับ|ไม่ปรับ|no\s*change|full\s*dose|ปกติ|100\s*%/i.test(action)) continue
     const isHardStop = /hold|avoid|contraindicat|ห้ามใช้|งด/i.test(action)
     const sev: ScreeningAlert['severity'] =
       isHardStop ? 'red' :
@@ -619,12 +621,10 @@ export function buildHadAlerts(drugs: DrugEntry[], hadRules: HadRule[] = []): Sc
     const prep = rule?.dilution ?? ref?.prep
     const maxConc = rule?.max_conc ?? ref?.maxConc
     const maxRate = rule?.max_rate ?? ref?.maxRate
-    const primaryInline = [
-      dose && `💉 Dose: ${dose}`,
-      prep && `🧪 เตรียม: ${prep}`,
-      maxConc && `Max conc: ${maxConc}`,
-      maxRate && `Max rate: ${maxRate}`,
-    ].filter(Boolean).join('  ·  ')
+    // แสดงเสมอแบบกระชับ: Dose อย่างเดียว (เตรียม/conc/rate อยู่ใน "ดูรายละเอียด")
+    const primaryInline = dose
+      ? `💉 ${dose} · เช็คความเข้มข้น/อัตราให้ (ดูรายละเอียด)`
+      : 'double-check dose / route / patient identity ก่อนจ่าย'
 
     const detail = [
       dose && `💉 Dose: ${dose}`,

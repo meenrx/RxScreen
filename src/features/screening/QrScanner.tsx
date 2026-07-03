@@ -54,9 +54,9 @@ interface Props {
   onScan: (data: ScannedData) => void
 }
 
-// กล้องหลัง + ความละเอียดสูง + โฟกัสต่อเนื่อง → อ่าน QR แน่น ๆ (147 ตัว) บนมือถือได้ไวและแม่นขึ้น
+// มือถือ = กล้องหลัง · PC = webcam (ใช้ ideal ไม่บังคับ เพื่อไม่ให้ getUserMedia ล้มบนเครื่องที่ไม่มีกล้องหลัง)
 const SCAN_CONSTRAINTS: MediaTrackConstraints = {
-  facingMode: 'environment',
+  facingMode: { ideal: 'environment' },
   width: { ideal: 1920 },
   height: { ideal: 1080 },
   advanced: [{ focusMode: 'continuous' }] as unknown as MediaTrackConstraintSet[],
@@ -159,7 +159,7 @@ export function QrScannerModal({ open, onOpenChange, onScan }: Props) {
                 constraints={SCAN_CONSTRAINTS}
                 scanDelay={100}
                 retryDelay={80}
-                sound
+                sound={false}
                 styles={{ container: { width: '100%', height: '100%' } }}
               />
               <div className="absolute inset-8 border-4 border-emerald-400/80 rounded-2xl pointer-events-none animate-pulse" />

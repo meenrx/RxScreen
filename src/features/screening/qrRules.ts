@@ -21,7 +21,8 @@ const G = {
   antiplatelet: /clopidogrel|ticagrelor|prasugrel|ticlopidine|dipyridamole|cilostazol/,
   heparin: /heparin|enoxaparin|dalteparin|fondaparinux|nadroparin/,
   sulfonylurea: /glibenclamide|glyburide|glipizide|gliclazide|glimepiride/,
-  insulin: /insulin/,
+  insulin: /insulin|mixtard|humulin|novomix|novorapid|novolog|actrapid|insulatard|lantus|levemir|glargine|aspart|lispro|degludec|detemir|isophane|ryzodeg|tresiba|toujeo|apidra/,
+  antidiabetic: /insulin|mixtard|humulin|novomix|novorapid|actrapid|insulatard|lantus|levemir|glargine|degludec|isophane|ryzodeg|tresiba|metformin|glipizide|glibenclamide|glyburide|gliclazide|glimepiride|pioglitazone|rosiglitazone|sitagliptin|vildagliptin|linagliptin|saxagliptin|gliptin|empagliflozin|dapagliflozin|canagliflozin|gliflozin|acarbose|voglibose/,
   statin: /\w*statin\b/,
   hepatotoxic: /\w*statin\b|isoniazid|rifampicin|pyrazinamide|methotrexate|valproate|valproic|amiodarone|carbamazepine|nevirapine|efavirenz|phenytoin|ketoconazole|itraconazole|fluconazole|paracetamol|acetaminophen/,
   protein_bound: /warfarin|phenytoin|valproate|valproic/,
@@ -132,15 +133,20 @@ export function buildQrRuleAlerts(drugs: DrugEntry[], p: PatientInput): Screenin
 
   // ---- 3.3 Diabetes — รวม HbA1c + น้ำตาล เป็น card เดียว ----
   const su = inGroup(drugs, G.sulfonylurea)
-  const ins = inGroup(drugs, G.insulin)
-  const dmDrugs = dedupe([...su, ...ins])
+  const dmDrugs = inGroup(drugs, G.antidiabetic)  // ยาเบาหวานทุกชนิด (มี=ทบทวน · ไม่มี=ควรเริ่ม)
   const a1cHi = labs.hba1c !== undefined && labs.hba1c > 9
   const fbsHi = labs.fbs !== undefined && labs.fbs > 250
   if (a1cHi || fbsHi) {
     const parts: string[] = []
     if (labs.hba1c !== undefined) parts.push(`HbA1c ${labs.hba1c}%`)
     if (labs.fbs !== undefined) parts.push(`FBS ${labs.fbs}`)
-    push({ id: 'qr_dm', type: 'LAB', severity: 'yellow', title: `🩸 เบาหวานคุมไม่ได้ — ${parts.join(' · ')}`, detail: `เกินเป้า (HbA1c>9 / น้ำตาล>250) → ทบทวนยาเบาหวาน + ความร่วมมือ${staleNote(p, a1cHi ? 'hba1c' : 'fbs')}`, recommendation: 'ทบทวนแผนการรักษาเบาหวาน', drugs: icodes(dmDrugs) })
+    const vals = parts.join(' · ')
+    // มียาเบาหวานอยู่แล้ว → ทบทวนยา · ยังไม่มี → ควรเริ่มยาเบาหวาน (รวมเป็นจุดเดียว)
+    if (dmDrugs.length) {
+      push({ id: 'qr_dm', type: 'LAB', severity: 'yellow', title: `เบาหวานคุมไม่ได้ — ${vals}`, detail: `ทบทวนขนาดยา/ความร่วมมือ${staleNote(p, a1cHi ? 'hba1c' : 'fbs')}`, recommendation: 'ทบทวนแผนการรักษาเบาหวาน', drugs: icodes(dmDrugs) })
+    } else {
+      push({ id: 'qr_dm_gap', type: 'OMIT', severity: 'yellow', title: `น้ำตาลสูง (${vals}) แต่ยังไม่มียาเบาหวาน`, detail: `ควรพิจารณาเริ่มยาเบาหวาน${staleNote(p, a1cHi ? 'hba1c' : 'fbs')}`, recommendation: 'เริ่ม/เพิ่มยาเบาหวาน', drugs: [] })
+    }
   }
   if (labs.fbs !== undefined && labs.fbs < 70 && dmDrugs.length) push({ id: 'qr_dm_hypo', type: 'LAB', severity: 'orange', title: `⚠️ น้ำตาลต่ำ ${labs.fbs} < 70 + ${su.length ? 'sulfonylurea' : 'insulin'}`, detail: `เสี่ยง hypoglycemia: ${names(dmDrugs)}${(p.age ?? 0) >= 65 ? ' (สูงอายุ — ระวังมาก)' : ''}${staleNote(p, 'fbs')}`, recommendation: 'ระวัง/ลดขนาด โดยเฉพาะไตเสื่อม/สูงอายุ', drugs: icodes(dmDrugs) })
 
@@ -201,12 +207,7 @@ export function buildQrRuleAlerts(drugs: DrugEntry[], p: PatientInput): Screenin
   if (labs.mg !== undefined && labs.mg < 1.7 && !hasMg) {
     push({ id: 'qr_gap_mg', type: 'OMIT', severity: 'yellow', title: `💊 Mg ต่ำ (${labs.mg}) แต่ยังไม่มี Mg`, detail: `ควรพิจารณาให้ magnesium ทดแทน (โดยเฉพาะถ้า K ต่ำร่วมด้วย)${staleNote(p, 'mg')}`, recommendation: 'พิจารณาเพิ่ม magnesium', drugs: [] })
   }
-  // เบาหวานคุมไม่ได้ แต่ยังไม่มียาเบาหวานเลย
-  const antidiab = /metformin|glipizide|glibenclamide|glyburide|gliclazide|glimepiride|insulin|pioglitazone|rosiglitazone|sitagliptin|vildagliptin|linagliptin|saxagliptin|gliptin|empagliflozin|dapagliflozin|canagliflozin|gliflozin|acarbose|voglibose/
-  const hasAntidiab = inGroup(drugs, antidiab).length > 0
-  if (!hasAntidiab && ((labs.hba1c !== undefined && labs.hba1c > 9) || (labs.fbs !== undefined && labs.fbs > 250))) {
-    push({ id: 'qr_gap_dm', type: 'OMIT', severity: 'yellow', title: '💊 น้ำตาลสูงแต่ยังไม่มียาเบาหวาน', detail: `${labs.hba1c !== undefined ? `HbA1c ${labs.hba1c}% ` : ''}${labs.fbs !== undefined ? `FBS ${labs.fbs} ` : ''}— ควรพิจารณาเริ่มการรักษาเบาหวาน`, recommendation: 'ทบทวนแผนการรักษาเบาหวาน', drugs: [] })
-  }
+  // (DM care-gap รวมอยู่ใน 3.3 แล้ว — ถ้าน้ำตาลสูง+ไม่มียาเบาหวาน จะเตือน "ควรเริ่มยา")
   // K สูงมาก แต่ยังไม่มี treatment ลด K
   const hasKLower = inGroup(drugs, /kalimate|polystyrene|calcium\s*gluconate|sodium\s*bicarb|dextrose|insulin/).length > 0
   if (labs.k !== undefined && labs.k > 6.0 && !hasKLower) {
