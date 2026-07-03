@@ -271,7 +271,8 @@ function parseKeyedFields(text: string): ScannedData {
   // เรียง key ยาว/เฉพาะเจาะจงก่อน กัน Gf↔G, A1/Ab↔A, Cr↔C, Nc↔N ชนกัน
   // NB: A1 (HbA1c) จัดการแยกก่อน keys.find — เฉพาะเมื่อมีทศนิยม (กันชนอายุ 10-19 ที่เป็นจำนวนเต็ม)
   const KEYS = ['Gf', 'Ab', 'Cr', 'Nc', 'Ec', 'Hb', 'R:', 'D:', 'N', 'C', 'A', 'S', 'W', 'I', 'G', 'O', 'L', 'T', 'K', 'M', 'B', '6', 'P']
-  const out: ScannedData = { drugs: [], labs: {}, labDates: {} }
+  // QR รายงานสถานะตั้งครรภ์เสมอ: มี P = ตั้งครรภ์/ให้นม · ไม่มี P = ไม่ตั้งครรภ์ (false ชัดเจน ไม่ต้องถามซ้ำ)
+  const out: ScannedData = { drugs: [], labs: {}, labDates: {}, is_pregnant: false, is_lactating: false }
   const setLab = (key: string, raw: string) => {
     const { n, date } = labVal(raw)
     if (n !== undefined) { out.labs![key] = n; if (date) out.labDates![key] = date }
@@ -342,7 +343,7 @@ function parseKeyedFields(text: string): ScannedData {
       case 'B': setLab('bun', val); break
       case '6': out.g6pd_tested = true; out.g6pd = /def|พร่อง|deficien/i.test(val); break
       case 'D': out.diseases = val ? val.split(',').map((x) => x.trim()).filter(Boolean) : undefined; break
-      case 'P': out.is_pregnant = true; break // มี key = ตั้งครรภ์/ให้นม
+      case 'P': out.is_pregnant = true; out.is_lactating = true; break // มี key = ตั้งครรภ์/ให้นม
     }
   }
   if (out.labs && Object.keys(out.labs).length === 0) delete out.labs

@@ -143,13 +143,15 @@ export function computeRequiredFields(drugs: DrugEntry[], patient: PatientInput 
     //    - rule ที่ใช้ eGFR → ขอ eGFR ตรง ๆ ไม่ต้องคำนวณ
     const renalRule = rules.find((r) => r.dose_meta)
     if (renalRule && !syrup) {
-      if (renalBasisOf(renalRule) === 'egfr') {
-        add('egfr', 'eGFR', 'mL/min', `${name} → ปรับ dose ตาม eGFR (กรอกค่าตรง)`, 'high')
-      } else {
-        add('age', 'อายุ', 'ปี', `${name} → ปรับ dose ตาม CrCl`, 'high')
-        add('weight', 'น้ำหนัก', 'kg', `${name} → ปรับ dose ตาม CrCl`, 'high')
-        add('sex', 'เพศ', undefined, `${name} → ปรับ dose ตาม CrCl`, 'high')
-        add('scr', 'SCr', 'mg/dL', `${name} → ปรับ dose ตาม CrCl`, 'high')
+      // ถ้ามีค่าไต (CrCl/eGFR) อยู่แล้ว เช่นจาก QR → ใช้ได้เลย ไม่ต้องขอ SCr มาคำนวณ
+      const haveRenal = patient.egfr !== undefined && patient.egfr > 0
+      if (!haveRenal) {
+        if (renalBasisOf(renalRule) === 'egfr') {
+          add('egfr', 'eGFR', 'mL/min', `${name} → ปรับ dose ตาม eGFR (กรอกค่าตรง)`, 'high')
+        } else {
+          add('egfr', 'CrCl/eGFR', 'mL/min', `${name} → ปรับ dose ตามไต (กรอก CrCl หรือ SCr+อายุ+นน.+เพศ)`, 'high')
+          add('scr', 'SCr', 'mg/dL', `${name} → ปรับ dose ตาม CrCl (ถ้าไม่มี CrCl ตรง)`, 'medium')
+        }
       }
     }
     // 1.2) NSAID → ขอค่าไต (eGFR) เพื่อเช็คความปลอดภัย (เสี่ยง AKI)
