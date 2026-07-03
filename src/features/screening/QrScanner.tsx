@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { mapAllergen } from './allergenMap'
 
 export interface ScannedData {
   hn?: string
@@ -17,8 +18,16 @@ export interface ScannedData {
   weight?: number
   /** CrCl (mL/min) — Cockcroft-Gault ฝั่ง รพ. */
   crcl?: number
+  /** GFR ที่ lab รายงาน (mL/min/1.73m²) */
+  gfr?: number
+  /** CKD stage จาก GFR เช่น "5", "3a" */
+  ckd_stage?: string
   /** serum creatinine (mg/dL) */
   scr?: number
+  /** จำนวน allergen จริง (อาจมากกว่าที่ QR โชว์) */
+  allergy_count?: number
+  /** true = แพ้มากกว่าที่โชว์ใน QR → ต้องดู record เพิ่ม */
+  allergy_truncated?: boolean
   /** INR */
   inr?: number
   /** ค่าแล็บอื่น ๆ keyed lowercase: k, ast, alt, fbs, bun, mg, albumin, plt, anc, aec, ... */
@@ -253,13 +262,15 @@ function labVal(v: string): { n?: number; date?: string } {
 }
 
 /**
- * parse QR v2 (key สั้น, ตัด field ว่าง, lab = ค่า@YYMMDD, จับด้วย prefix ไม่ใช่ตำแหน่ง)
- * N=AN R:=ยา A=อายุ S=เพศ W=นน. G=FBS Y:=แพ้ P1=ตั้งครรภ์ C=CrCl Cr=SCr B=BUN
- * K=K M=Mg 6=G6PD O=AST L=ALT Ab=Albumin I=INR T=Plt Nc=ANC Ec=AEC D:=ICD10
+ * parse QR แบบ key-based (v2/v3) — ตัด field ว่าง, lab = ค่า@YYMMDD, จับด้วย prefix ไม่ใช่ตำแหน่ง
+ * N=AN R:=ยา A=อายุ S=เพศ W=นน. C=CrCl Gf=GFR[stage] I=INR A1=HbA1c G=FBS O=AST L=ALT
+ * Ab=Albumin Hb=Hb Nc=ANC Ec=AEC T=Plt K=K 6=G6PD D:=ICD10 P=ตั้งครรภ์
+ * Y<count>:ตัวย่อ6ตัว = แพ้ยา (map เป็นกลุ่ม) · (v2 เดิม: Cr=SCr B=BUN M=Mg รองรับด้วย)
  */
-function parseV2Fields(text: string): ScannedData {
-  // เรียง key ยาว/เฉพาะเจาะจงก่อน กัน Cr↔C, Nc↔N, Ab↔A ชนกัน
-  const KEYS = ['Nc', 'Ec', 'Ab', 'Cr', 'P1', 'R:', 'Y:', 'D:', 'N', 'C', 'A', 'S', 'W', 'G', 'B', 'K', 'M', '6', 'O', 'L', 'I', 'T']
+function parseKeyedFields(text: string): ScannedData {
+  // เรียง key ยาว/เฉพาะเจาะจงก่อน กัน Gf↔G, A1/Ab↔A, Cr↔C, Nc↔N ชนกัน
+  // NB: A1 (HbA1c) จัดการแยกก่อน keys.find — เฉพาะเมื่อมีทศนิยม (กันชนอายุ 10-19 ที่เป็นจำนวนเต็ม)
+  const KEYS = ['Gf', 'Ab', 'Cr', 'Nc', 'Ec', 'Hb', 'R:', 'D:', 'N', 'C', 'A', 'S', 'W', 'I', 'G', 'O', 'L', 'T', 'K', 'M', 'B', '6', 'P']
   const out: ScannedData = { drugs: [], labs: {}, labDates: {} }
   const setLab = (key: string, raw: string) => {
     const { n, date } = labVal(raw)
@@ -268,6 +279,33 @@ function parseV2Fields(text: string): ScannedData {
   for (const seg of text.split('|')) {
     const s = seg.trim()
     if (!s) continue
+
+    // แพ้ยา Y<count>:ABBR,ABBR,... (v3) หรือ Y:... (v2) — จัดการก่อน keys.find
+    const ym = s.match(/^Y(\d*):(.*)$/)
+    if (ym) {
+      const items = ym[2].split(',').map((x) => x.trim().replace(/\*/g, '')).filter(Boolean)
+      const count = ym[1] ? Number(ym[1]) : items.length
+      out.allergy_count = count
+      out.allergy_truncated = count > items.length
+      // แต่ละตัวย่อ: ใส่ทั้งชื่อดิบ (match generic ตรง) + ชื่อกลุ่ม (match cross-react)
+      const set = new Set<string>()
+      for (const ab of items) {
+        set.add(ab.toLowerCase())
+        const m = mapAllergen(ab)
+        if (m) set.add(m.name)
+      }
+      out.allergies = set.size ? [...set] : undefined
+      continue
+    }
+
+    // HbA1c 'A1<เลขทศนิยม>' เช่น A18.2 = 8.2% — ต้องมีจุดทศนิยม (กันชนอายุ A16)
+    const a1m = s.match(/^A1(\d*\.\d+)(?:@(\d{6}))?/)
+    if (a1m) {
+      out.labs!.hba1c = Number(a1m[1])
+      if (a1m[2]) out.labDates!.hba1c = a1m[2]
+      continue
+    }
+
     const key = KEYS.find((k) => s.startsWith(k))
     if (!key) continue
     const bare = key.replace(':', '')
@@ -279,22 +317,32 @@ function parseV2Fields(text: string): ScannedData {
       case 'S': out.sex = val === 'M' || val === 'F' ? val : undefined; break
       case 'W': out.weight = num(val); break
       case 'C': { const { n, date } = labVal(val); out.crcl = n; if (date) out.labDates!.crcl = date; break }
+      case 'Gf': {
+        // "5[5]@260701" → gfr 5, stage 5, date · หรือ "27[3a]"
+        const [raw, date] = val.split('@')
+        const gm = raw.match(/^(\d+(?:\.\d+)?)(?:\[([0-9ab]+)\])?/i)
+        if (gm) {
+          out.gfr = Number(gm[1]); out.ckd_stage = gm[2]
+          out.labs!.gfr = Number(gm[1]); if (date) out.labDates!.gfr = date
+        }
+        break
+      }
       case 'Cr': { const { n, date } = labVal(val); out.scr = n; if (date) out.labDates!.scr = date; break }
+      case 'I': { const { n, date } = labVal(val); out.inr = n; if (date) out.labDates!.inr = date; break }
       case 'G': setLab('fbs', val); break
-      case 'B': setLab('bun', val); break
-      case 'K': setLab('k', val); break
-      case 'M': setLab('mg', val); break
       case 'O': setLab('ast', val); break
       case 'L': setLab('alt', val); break
       case 'Ab': setLab('albumin', val); break
-      case 'I': { const { n, date } = labVal(val); out.inr = n; if (date) out.labDates!.inr = date; break }
+      case 'Hb': setLab('hb', val); break
       case 'T': setLab('plt', val); break
+      case 'K': setLab('k', val); break
       case 'Nc': setLab('anc', val); break
       case 'Ec': setLab('aec', val); break
+      case 'M': setLab('mg', val); break
+      case 'B': setLab('bun', val); break
       case '6': out.g6pd_tested = true; out.g6pd = /def|พร่อง|deficien/i.test(val); break
-      case 'Y': out.allergies = val ? val.split(',').map((x) => x.trim()).filter(Boolean) : undefined; break
       case 'D': out.diseases = val ? val.split(',').map((x) => x.trim()).filter(Boolean) : undefined; break
-      case 'P1': out.is_pregnant = true; break // มี key = ตั้งครรภ์
+      case 'P': out.is_pregnant = true; break // มี key = ตั้งครรภ์/ให้นม
     }
   }
   if (out.labs && Object.keys(out.labs).length === 0) delete out.labs
@@ -306,9 +354,9 @@ export function parseQrPayload(raw: string): ScannedData {
   const text = raw.trim()
   if (!text) throw new Error('ข้อมูล QR ว่าง')
 
-  // v2 (key สั้น) — ตรวจก่อน: มี segment ขึ้นต้น "R:" (รายการยา)
+  // v2/v3 (key สั้น) — ตรวจก่อน: มี segment ขึ้นต้น "R:" (รายการยา)
   if (/(^|\|)R:/.test(text)) {
-    return parseV2Fields(text)
+    return parseKeyedFields(text)
   }
 
   // IPD 14-field เดิม (RX:/CrCl/Dx:/AN)

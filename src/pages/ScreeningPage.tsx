@@ -161,6 +161,8 @@ export default function ScreeningPage() {
     if (data.diseases?.length) setSelectedDiseases((prev) => Array.from(new Set([...prev, ...data.diseases!])))
     // เตือนถ้ายังไม่เจาะ G6PD (— ไม่ใช่ปกติ)
     if (data.g6pd_tested === false) toast.warning('ยังไม่ได้เจาะ G6PD — ตรวจสอบก่อนจ่ายยากลุ่ม oxidant')
+    // เตือนถ้าแพ้ยาหลายตัวเกินกว่าที่ QR โชว์
+    if (data.allergy_truncated) toast.warning(`ผู้ป่วยแพ้ยา ${data.allergy_count ?? ''} ชนิด — QR โชว์ไม่ครบ ตรวจสอบ record เพิ่ม`)
     if (inMemory.length > 0) toast.success(`สแกนได้ ${inMemory.length} รายการยา`)
 
     // 3) เบื้องหลัง (ขนานทั้งหมด): โหลด labRules ของยาที่ add แล้ว + หา master ของยาที่ยังไม่เจอใน memory

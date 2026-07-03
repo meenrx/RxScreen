@@ -19,7 +19,7 @@ interface LabItem {
   staleDays?: number
 }
 
-const ORDER = ['crcl', 'scr', 'bun', 'k', 'mg', 'fbs', 'ast', 'alt', 'albumin', 'inr', 'plt', 'anc', 'aec']
+const ORDER = ['crcl', 'gfr', 'scr', 'bun', 'k', 'mg', 'hb', 'plt', 'anc', 'aec', 'fbs', 'hba1c', 'ast', 'alt', 'albumin', 'inr']
 
 /** แสดงผลแล็บที่ได้จาก QR/กรอกมือ — ไฮไลต์ค่าผิดปกติ/วิกฤต + วันที่ (เตือนค่าเก่า) */
 export function ScannedLabPanel({ patient }: Props) {
