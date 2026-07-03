@@ -27,10 +27,19 @@ const GROUPS: { class: string; name: string; abbrs: string[] }[] = [
 
 const ABBR_INDEX = new Map<string, AllergenClass>()
 for (const g of GROUPS) {
+  // รับทั้งตัวย่อ 6 ตัว (AMOXIC) และรหัสกลุ่มตรง ๆ (PCN)
+  ABBR_INDEX.set(g.class.toUpperCase(), { class: g.class, name: g.name })
   for (const a of g.abbrs) ABBR_INDEX.set(a.toUpperCase(), { class: g.class, name: g.name })
 }
+// รหัสกลุ่มเพิ่มเติมที่ QR อาจส่งมาตรง ๆ (นอกเหนือจาก 6-char)
+const EXTRA_CLASS: Record<string, string> = {
+  CARB: 'carbapenem', CBZ: 'carbamazepine', PHT: 'phenytoin', ACEI: 'acei',
+  ARB: 'arb', THIAZ: 'thiazide', SU: 'sulfonylurea', VANCO: 'vancomycin',
+  ALLOP: 'allopurinol', HEPARIN: 'heparin',
+}
+for (const [code, name] of Object.entries(EXTRA_CLASS)) ABBR_INDEX.set(code, { class: code, name })
 
-/** แปลงตัวย่อ 6 ตัว → กลุ่มยา (คืน null ถ้า map ไม่ได้ — ให้ใช้ตัวย่อดิบต่อ) */
+/** แปลงตัวย่อ (6 ตัว หรือรหัสกลุ่ม PCN/SULFA/...) → กลุ่มยา (null ถ้า map ไม่ได้) */
 export function mapAllergen(abbr: string): AllergenClass | null {
   const a = abbr.trim().toUpperCase().replace(/\*/g, '')
   return ABBR_INDEX.get(a) ?? null

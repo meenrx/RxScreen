@@ -2,6 +2,7 @@ import type { DdiOverride, DiseaseRule, DrugMaster, HadRule, LabRule, DrugSubsti
 import type { DrugEntry, PatientInput, ScreeningAlert } from '@/types/screening'
 import { calcCrCl, findMatchingDoseAction, renalBasisOf, computePediatricDose } from '@/features/renal/calc'
 import { buildRduAlerts } from './rduRules'
+import { buildQrRuleAlerts } from './qrRules'
 import { findRenalRef, pickRenalBand } from './renalDoseRef'
 
 function nameEq(a: string | undefined, b: string | undefined): boolean {
@@ -993,6 +994,7 @@ export function runScreening(ctx: ScreenContext): ScreeningAlert[] {
     ...buildDueAlerts(ctx.drugs),
     ...buildNoCrushAlerts(ctx.drugs, ctx.patient),
     ...buildRduAlerts(ctx.drugs, ctx.patient),
+    ...buildQrRuleAlerts(ctx.drugs, ctx.patient),
   ].sort((a, b) => sevRank(a.severity) - sevRank(b.severity))
 }
 
