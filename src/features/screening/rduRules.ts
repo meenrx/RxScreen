@@ -46,9 +46,10 @@ function isNsaidOrCoxib(d: DrugEntry): boolean {
   ].filter(Boolean).join(' ').toLowerCase()
   const keys = [
     'ibuprofen', 'naproxen', 'diclofenac', 'mefenamic', 'indomethacin', 'piroxicam',
-    'meloxicam', 'celecoxib', 'etoricoxib', 'ketorolac', 'aspirin', 'nsaid',
+    'meloxicam', 'celecoxib', 'etoricoxib', 'ketorolac', 'nsaid',
     'nonsteroidal', 'anti-inflammatory', 'cox-2', 'coxib',
   ]
+  // aspirin ไม่นับเป็น NSAID สำหรับกฎ RDU/CKD (ใช้เป็น antiplatelet) → ยกเว้น
   return keys.some((k) => hay.includes(k))
 }
 

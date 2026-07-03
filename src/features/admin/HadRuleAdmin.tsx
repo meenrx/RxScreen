@@ -8,7 +8,25 @@ import { Textarea } from '@/components/ui/textarea'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { useHadRules, useSaveHadRule, useDelete } from '@/features/catalog/hooks'
+import { HAD_REF, type HadRef } from '@/features/screening/hadRef'
+import { Badge } from '@/components/ui/badge'
+import { ChevronDown, BookOpen } from 'lucide-react'
 import type { HadRule } from '@/types/drug'
+
+/** แปลงฐานอ้างอิง built-in → HAD rule (สำหรับดึงมาปรับ/บันทึกในแท็บ HAD) */
+function refToRule(r: HadRef): HadRule {
+  return {
+    drug_key: r.generic,
+    drug_name: r.generic.charAt(0).toUpperCase() + r.generic.slice(1),
+    max_dose: r.dose,
+    max_rate: r.maxRate,
+    max_conc: r.maxConc,
+    dilution: r.prep,
+    route_note: [r.compatible && `ผสมได้: ${r.compatible}`, r.incompatible && `ห้ามผสม: ${r.incompatible}`].filter(Boolean).join(' · ') || undefined,
+    antidote: r.antidote,
+    full_note: r.note,
+  }
+}
 
 export function HadRuleAdmin() {
   const { data = [], isLoading } = useHadRules()
@@ -17,6 +35,15 @@ export function HadRuleAdmin() {
   const [search, setSearch] = useState('')
   const [edit, setEdit] = useState<HadRule | null>(null)
   const [open, setOpen] = useState(false)
+  const [showRef, setShowRef] = useState(false)
+
+  // generic ที่มีกฎ HAD ตั้งไว้แล้ว (drug_key ตรงกับ built-in)
+  const configuredKeys = useMemo(() => new Set(data.map((d) => d.drug_key.trim().toLowerCase())), [data])
+  const refFiltered = useMemo(() => {
+    const s = search.trim().toLowerCase()
+    if (!s) return HAD_REF
+    return HAD_REF.filter((r) => r.generic.includes(s) || (r.aliases ?? []).some((a) => a.includes(s)))
+  }, [search])
 
   const filtered = useMemo(() => {
     const s = search.toLowerCase()
@@ -97,6 +124,55 @@ export function HadRuleAdmin() {
             ))}
           </TableBody>
         </Table>
+
+        {/* ฐานอ้างอิง built-in (hadRef) — ใช้เมื่อไม่ได้ตั้งกฎเอง · กดดึงมาปรับได้ */}
+        <div className="rounded-xl border bg-muted/20">
+          <button type="button" onClick={() => setShowRef((v) => !v)} className="w-full flex items-center gap-2 px-3 py-2.5 text-sm font-semibold">
+            <BookOpen className="size-4 text-cyan-600" />
+            ฐานอ้างอิง built-in (HAD) — {HAD_REF.length} ยา (Trissel/ISMP/AIDH)
+            <span className="text-xs font-normal text-muted-foreground ml-1">ระบบใช้ค่าเหล่านี้เมื่อยังไม่ได้ตั้งกฎเอง</span>
+            <ChevronDown className={`size-4 ml-auto transition-transform ${showRef ? 'rotate-180' : ''}`} />
+          </button>
+          {showRef && (
+            <div className="overflow-x-auto border-t">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>generic</TableHead>
+                    <TableHead>Dose</TableHead>
+                    <TableHead>วิธีเตรียม</TableHead>
+                    <TableHead className="w-[100px]">Max conc/rate</TableHead>
+                    <TableHead>Antidote / Note</TableHead>
+                    <TableHead className="text-right w-[110px]">ปรับในกฎ</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {refFiltered.map((r) => {
+                    const has = configuredKeys.has(r.generic.toLowerCase())
+                    return (
+                      <TableRow key={r.generic}>
+                        <TableCell className="text-sm font-medium">
+                          {r.generic}
+                          {r.aliases?.length ? <div className="text-[10px] text-muted-foreground">{r.aliases.join(', ')}</div> : null}
+                          {has && <Badge variant="green" className="text-[9px] px-1 mt-0.5">ตั้งกฎแล้ว</Badge>}
+                        </TableCell>
+                        <TableCell className="text-xs max-w-[200px]">{r.dose ?? '-'}</TableCell>
+                        <TableCell className="text-xs max-w-[200px]">{r.prep ?? '-'}</TableCell>
+                        <TableCell className="text-[11px]">{[r.maxConc, r.maxRate].filter(Boolean).join(' · ') || '-'}</TableCell>
+                        <TableCell className="text-[11px] max-w-[220px]">{[r.antidote && `💊 ${r.antidote}`, r.note].filter(Boolean).join(' · ') || '-'}</TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => { setEdit(refToRule(r)); setOpen(true) }}>
+                            <Pencil className="size-3" /> ปรับ
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </div>
       </CardContent>
 
       <Dialog open={open} onOpenChange={setOpen}>

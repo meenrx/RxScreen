@@ -17,16 +17,17 @@ export interface LabMeta {
 
 /** อ่านจาก patient.labs (key) + ฟิลด์ตรง scr/egfr(→crcl)/inr */
 export const LAB_META: Record<string, LabMeta> = {
-  crcl: { key: 'crcl', label: 'CrCl', unit: 'mL/min', low: 60, critLow: 15, rangeText: '≥90 (ปกติ)' },
-  gfr: { key: 'gfr', label: 'GFR', unit: 'mL/min/1.73', low: 60, critLow: 15, rangeText: '≥90 (ปกติ)' },
-  scr: { key: 'scr', label: 'SCr', unit: 'mg/dL', high: 1.2, critHigh: 4, rangeText: '0.6–1.2' },
+  // critLow/critHigh = ระดับที่ "ต้องปรับ/หยุดยา" → โชว์สีแดง (action-required)
+  crcl: { key: 'crcl', label: 'CrCl', unit: 'mL/min', low: 60, critLow: 30, rangeText: '≥90 (ปกติ)' },
+  gfr: { key: 'gfr', label: 'GFR', unit: 'mL/min/1.73', low: 60, critLow: 30, rangeText: '≥90 (ปกติ)' },
+  scr: { key: 'scr', label: 'SCr', unit: 'mg/dL', high: 1.2, critHigh: 2, rangeText: '0.6–1.2' },
   bun: { key: 'bun', label: 'BUN', unit: 'mg/dL', high: 20, critHigh: 100, rangeText: '7–20' },
-  k: { key: 'k', label: 'K⁺', unit: 'mmol/L', low: 3.5, high: 5.0, critLow: 2.5, critHigh: 6.0, rangeText: '3.5–5.0' },
-  hb: { key: 'hb', label: 'Hb', unit: 'g/dL', low: 12, high: 18, critLow: 7, rangeText: '12–16' },
-  fbs: { key: 'fbs', label: 'FBS', unit: 'mg/dL', low: 70, high: 125, critLow: 50, critHigh: 250, rangeText: '70–100' },
-  hba1c: { key: 'hba1c', label: 'HbA1c', unit: '%', high: 7, critHigh: 10, rangeText: '<7 (เป้าหมาย)' },
-  ast: { key: 'ast', label: 'AST', unit: 'U/L', high: 40, critHigh: 200, rangeText: '0–40' },
-  alt: { key: 'alt', label: 'ALT', unit: 'U/L', high: 40, critHigh: 200, rangeText: '0–40' },
+  k: { key: 'k', label: 'K⁺', unit: 'mmol/L', low: 3.5, high: 5.0, critLow: 3.0, critHigh: 5.5, rangeText: '3.5–5.0' },
+  hb: { key: 'hb', label: 'Hb', unit: 'g/dL', low: 12, high: 18, critLow: 8, rangeText: '12–16' },
+  fbs: { key: 'fbs', label: 'FBS', unit: 'mg/dL', low: 70, high: 125, critLow: 54, critHigh: 250, rangeText: '70–100' },
+  hba1c: { key: 'hba1c', label: 'HbA1c', unit: '%', high: 7, critHigh: 9, rangeText: '<7 (เป้าหมาย)' },
+  ast: { key: 'ast', label: 'AST', unit: 'U/L', high: 40, critHigh: 120, rangeText: '0–40' },
+  alt: { key: 'alt', label: 'ALT', unit: 'U/L', high: 40, critHigh: 120, rangeText: '0–40' },
   albumin: { key: 'albumin', label: 'Albumin', unit: 'g/dL', low: 3.5, critLow: 2.0, rangeText: '3.5–5.0' },
   inr: { key: 'inr', label: 'INR', unit: '', high: 1.2, critHigh: 4.0, rangeText: '0.8–1.2 (ไม่ได้กินวาร์ฟาริน)' },
   plt: { key: 'plt', label: 'Plt', unit: '×10³/µL', low: 150, high: 450, critLow: 50, critHigh: 1000, rangeText: '150–450' },

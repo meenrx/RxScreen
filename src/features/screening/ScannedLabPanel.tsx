@@ -112,7 +112,8 @@ function tileClass(s: LabStatus): string {
   switch (s) {
     case 'critical-high':
     case 'critical-low':
-      return 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-200'
+      // แดงชัด + ขอบเข้ม — ค่าผิดปกติมากที่ต้องปรับยา
+      return 'bg-red-100 dark:bg-red-950/50 border-2 border-red-500 text-red-700 dark:text-red-200 font-bold ring-1 ring-red-400'
     case 'high':
       return 'bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-900 text-orange-800 dark:text-orange-200'
     case 'low':

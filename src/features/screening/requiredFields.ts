@@ -23,8 +23,9 @@ export type FieldId =
 /** คำที่บ่งชี้ว่าเป็น NSAID (เช็คจาก generic / drug_class / drug_category) */
 const NSAID_KEYS = [
   'ibuprofen', 'naproxen', 'diclofenac', 'mefenamic', 'indomethacin', 'piroxicam',
-  'meloxicam', 'celecoxib', 'etoricoxib', 'ketorolac', 'aspirin', 'nsaid',
+  'meloxicam', 'celecoxib', 'etoricoxib', 'ketorolac', 'nsaid',
   'nonsteroidal', 'anti-inflammatory', 'propionic', 'arcoxia', 'brufen',
+  // NB: aspirin ไม่นับเป็น NSAID (antiplatelet) — ยกเว้นจากกฎ NSAID/ไต
 ]
 
 function isNsaid(d: DrugEntry): boolean {
