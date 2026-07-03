@@ -117,6 +117,8 @@ export interface LabRule {
   /** ฐานการปรับ dose ตามไต: 'crcl' = คำนวณ Cockcroft-Gault (ขอ age/weight/sex/scr),
    *  'egfr' = ให้ผู้ใช้กรอก eGFR ตรง ๆ. ไม่ระบุ = เดาจาก dose_meta/param (default crcl) */
   renal_basis?: 'crcl' | 'egfr'
+  /** ยกเว้นเกณฑ์ไต — ยานี้ไม่ต้องปรับตามไต (ปิดทั้ง dose_meta และ built-in renal ref) */
+  renal_exempt?: boolean
   pediatric_dose?: string
   /** ขนาดยาตามน้ำหนัก (band format เดียวกับ dose_meta)
    *  เช่น "<10:125 mg q8h; 10-20:250 mg q8h; >20:500 mg q8h"

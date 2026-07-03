@@ -236,14 +236,16 @@ function resolveGfr(
 ): { gfr: number; label: 'eGFR' | 'CrCl' } | null {
   const basis = renalBasisOf(rule)
   if (basis === 'egfr') {
-    return patient.egfr !== undefined ? { gfr: patient.egfr, label: 'eGFR' } : null
+    // ปรับตาม GFR → ใช้ค่า GFR ที่ lab รายงาน (QR Gf) ก่อน
+    const gfr = patient.labs?.gfr ?? patient.egfr
+    return gfr !== undefined ? { gfr, label: 'eGFR' } : null
   }
-  // crcl — คำนวณถ้าข้อมูลครบ; ถ้าไม่ครบแต่ผู้ใช้กรอก eGFR มาก็ใช้แทนได้
+  // crcl — ใช้ CrCl (QR C = Cockcroft-Gault) ตรง ๆ ก่อน; ถ้าไม่มีค่อยคำนวณจาก SCr
+  if (patient.egfr !== undefined) return { gfr: patient.egfr, label: 'CrCl' }
   if (patient.scr && patient.age && patient.weight && patient.sex) {
     const { crcl } = calcCrCl({ age: patient.age, weight: patient.weight, height: patient.height, sex: patient.sex, scr: patient.scr })
     return { gfr: crcl, label: 'CrCl' }
   }
-  if (patient.egfr !== undefined) return { gfr: patient.egfr, label: 'eGFR' }
   return null
 }
 
@@ -251,6 +253,7 @@ export function buildRenalAlerts(drugs: DrugEntry[], patient: PatientInput): Scr
   const alerts: ScreeningAlert[] = []
   for (const drug of drugs) {
     const allowed = filterRulesByIndication(drug, patient)
+    if (allowed.some((r) => r.renal_exempt)) continue  // ยกเว้นเกณฑ์ไต (admin ลบเกณฑ์)
     const rule = allowed.find((r) => r.dose_meta)
     if (!rule?.dose_meta) continue
     const resolved = resolveGfr(rule, patient)
@@ -281,13 +284,15 @@ export function buildRenalAlerts(drugs: DrugEntry[], patient: PatientInput): Scr
   return alerts
 }
 
-/** CrCl ผู้ป่วย (Cockcroft-Gault) — คืน undefined ถ้าข้อมูลไม่พอ */
+/** ค่าไตสำหรับ renalDoseRef (คู่มือ Sanford/ACP = อิง CrCl Cockcroft-Gault) */
 function patientGfr(patient: PatientInput): { gfr: number; label: 'CrCl' | 'eGFR' } | undefined {
+  // QR C = CrCl (Cockcroft-Gault) → ใช้ตรง ๆ · ไม่มีก็คำนวณจาก SCr
+  if (patient.egfr !== undefined) return { gfr: Math.round(patient.egfr), label: 'CrCl' }
   if (patient.scr && patient.age && patient.weight && patient.sex) {
     const { crcl } = calcCrCl({ age: patient.age, weight: patient.weight, height: patient.height, sex: patient.sex, scr: patient.scr })
     return { gfr: Math.round(crcl), label: 'CrCl' }
   }
-  if (patient.egfr !== undefined) return { gfr: patient.egfr, label: 'eGFR' }
+  if (patient.labs?.gfr !== undefined) return { gfr: Math.round(patient.labs.gfr), label: 'eGFR' }
   return undefined
 }
 
@@ -1027,6 +1032,8 @@ export function runScreening(ctx: ScreenContext): ScreeningAlert[] {
   // renal: icode-based dose_meta (ตั้งเฉพาะ รพ.) ก่อน แล้วเติม generic-ref จากคู่มือสำหรับ icode ที่ยังไม่ถูกคุม
   const renalIcode = buildRenalAlerts(ctx.drugs, ctx.patient)
   const renalCovered = new Set(renalIcode.flatMap((a) => a.drugs ?? []))
+  // icode ที่ admin ยกเว้นเกณฑ์ไต → ข้าม built-in renal ref ด้วย
+  for (const d of ctx.drugs) if ((d.labRules ?? []).some((r) => r.renal_exempt)) renalCovered.add(d.icode)
   const renalRef = buildRenalRefAlerts(ctx.drugs, ctx.patient, renalCovered)
   return [
     ...buildAllergyAlerts(ctx.drugs, ctx.patient.allergies),

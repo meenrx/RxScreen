@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Search, Droplet, CheckCircle2, Pencil } from 'lucide-react'
+import { Search, Droplet, CheckCircle2, Pencil, Trash2, RotateCcw } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { useDrugs, useLabRules, useSaveLabRule } from '@/features/catalog/hooks'
+import { useDrugs, useLabRules, useSaveLabRule, useDelete } from '@/features/catalog/hooks'
 import { DoseMetaBuilder } from '@/features/admin/LabRuleAdmin'
 import { RENAL_DOSE_REF, findRenalRef, refToDoseMeta, type RenalDoseRef } from '@/features/screening/renalDoseRef'
 import type { DrugMaster, LabRule } from '@/types/drug'
@@ -22,6 +22,7 @@ export function RenalRefAdmin() {
   const { data: drugs = [], isLoading } = useDrugs()
   const { data: labRules = [] } = useLabRules()
   const saveRule = useSaveLabRule()
+  const del = useDelete('lab')
   const [q, setQ] = useState('')
   const [edit, setEdit] = useState<{ drug: DrugMaster; ref?: RenalDoseRef; rule: Partial<LabRule> } | null>(null)
 
@@ -31,6 +32,26 @@ export function RenalRefAdmin() {
     for (const r of labRules) if (r.dose_meta && !m.has(r.icode)) m.set(r.icode, r)
     return m
   }, [labRules])
+
+  // icode → LAB_RULE ที่ยกเว้นเกณฑ์ไต (ไม่ต้องปรับตามไต)
+  const exemptMap = useMemo(() => {
+    const m = new Map<string, LabRule>()
+    for (const r of labRules) if (r.renal_exempt && !m.has(r.icode)) m.set(r.icode, r)
+    return m
+  }, [labRules])
+
+  // ยกเว้นเกณฑ์ไต (ยาไม่ต้องปรับตามไต) — สร้าง LAB_RULE renal_exempt
+  async function exempt(drug: DrugMaster) {
+    try {
+      await saveRule.mutateAsync({ icode: drug.icode, drug_name: drug.drug_name, param: 'CrCl', renal_exempt: true, reason: 'ไม่ต้องปรับขนาดตามไต' } as LabRule)
+      toast.success(`ลบเกณฑ์ไตของ ${drug.drug_name} แล้ว — จะไม่เตือนปรับตามไต`)
+    } catch (e) { toast.error('ไม่สำเร็จ: ' + (e as Error).message) }
+  }
+  // คืนค่า (ลบ rule ยกเว้น → กลับมาใช้เกณฑ์คู่มือ)
+  async function unexempt(rule: LabRule) {
+    try { await del.mutateAsync(rule.id!); toast.success('คืนเกณฑ์ไตจากคู่มือแล้ว') }
+    catch (e) { toast.error('ไม่สำเร็จ: ' + (e as Error).message) }
+  }
 
   // จับคู่ยาในบัญชี รพ. → เกณฑ์ไตในคู่มือ (ผูกกับ icode)
   const matched = useMemo(() => {
@@ -135,13 +156,15 @@ export function RenalRefAdmin() {
                 )}
                 {filtered.map(({ drug, ref }) => {
                   const ov = overrideMap.get(drug.icode)
+                  const ex = exemptMap.get(drug.icode)
                   return (
-                    <TableRow key={drug.icode}>
+                    <TableRow key={drug.icode} className={ex ? 'opacity-60' : ''}>
                       <TableCell className="font-mono text-xs">{drug.icode}</TableCell>
                       <TableCell>
                         <div className="font-medium text-sm flex items-center gap-1.5">
                           {drug.drug_name}
-                          {ov && <Badge variant="orange" className="text-[9px] px-1">แก้ไขแล้ว</Badge>}
+                          {ex && <Badge variant="secondary" className="text-[9px] px-1">ยกเว้น</Badge>}
+                          {ov && !ex && <Badge variant="orange" className="text-[9px] px-1">แก้ไขแล้ว</Badge>}
                         </div>
                         <div className="text-[11px] text-muted-foreground">{drug.generic_name}{[drug.strength, drug.dosage_form ?? drug.form].filter(Boolean).length ? ' · ' + [drug.strength, drug.dosage_form ?? drug.form].filter(Boolean).join(' · ') : ''}</div>
                       </TableCell>
@@ -151,18 +174,31 @@ export function RenalRefAdmin() {
                         {ref.weightBased && <Badge variant="secondary" className="ml-1 text-[10px]">ตามน้ำหนัก</Badge>}
                       </TableCell>
                       <TableCell className="text-xs max-w-[280px]">
-                        {ov?.dose_meta
-                          ? <div className="text-emerald-700 dark:text-emerald-300">✎ {ov.dose_meta}</div>
-                          : ref.bands.map((b, i) => (
-                              <div key={i}><span className="text-muted-foreground">CrCl≤{b.max}:</span> {b.text}</div>
-                            ))}
-                        {ref.note && !ov && <div className="text-amber-700 dark:text-amber-400 mt-0.5">⚠ {ref.note}</div>}
+                        {ex
+                          ? <div className="text-muted-foreground italic">ไม่ต้องปรับตามไต (ยกเว้นแล้ว)</div>
+                          : ov?.dose_meta
+                            ? <div className="text-emerald-700 dark:text-emerald-300">✎ {ov.dose_meta}</div>
+                            : ref.bands.map((b, i) => (
+                                <div key={i}><span className="text-muted-foreground">CrCl≤{b.max}:</span> {b.text}</div>
+                              ))}
+                        {ref.note && !ov && !ex && <div className="text-amber-700 dark:text-amber-400 mt-0.5">⚠ {ref.note}</div>}
                       </TableCell>
-                      <TableCell className="text-[11px] text-muted-foreground whitespace-nowrap">{ov ? 'แก้ไขเอง' : ref.source}</TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="ghost" size="icon" className="size-8" onClick={() => openEdit(drug, ref)} aria-label="แก้ไขเกณฑ์">
-                          <Pencil className="size-4" />
-                        </Button>
+                      <TableCell className="text-[11px] text-muted-foreground whitespace-nowrap">{ex ? 'ยกเว้น' : ov ? 'แก้ไขเอง' : ref.source}</TableCell>
+                      <TableCell className="text-right whitespace-nowrap">
+                        {ex ? (
+                          <Button variant="ghost" size="sm" className="h-8 gap-1 text-xs" onClick={() => unexempt(ex)} aria-label="คืนเกณฑ์ไต">
+                            <RotateCcw className="size-3.5" /> คืนค่า
+                          </Button>
+                        ) : (
+                          <>
+                            <Button variant="ghost" size="icon" className="size-8" onClick={() => openEdit(drug, ref)} aria-label="แก้ไขเกณฑ์">
+                              <Pencil className="size-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="size-8 text-red-500" onClick={() => { if (confirm(`ลบเกณฑ์ไตของ ${drug.drug_name}? (ยานี้จะไม่เตือนปรับตามไต)`)) exempt(drug) }} aria-label="ลบเกณฑ์ไต">
+                              <Trash2 className="size-4" />
+                            </Button>
+                          </>
+                        )}
                       </TableCell>
                     </TableRow>
                   )
