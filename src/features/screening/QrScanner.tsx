@@ -279,7 +279,7 @@ function parseV2Fields(text: string): ScannedData {
       case 'S': out.sex = val === 'M' || val === 'F' ? val : undefined; break
       case 'W': out.weight = num(val); break
       case 'C': { const { n, date } = labVal(val); out.crcl = n; if (date) out.labDates!.crcl = date; break }
-      case 'Cr': out.scr = labVal(val).n; break
+      case 'Cr': { const { n, date } = labVal(val); out.scr = n; if (date) out.labDates!.scr = date; break }
       case 'G': setLab('fbs', val); break
       case 'B': setLab('bun', val); break
       case 'K': setLab('k', val); break
@@ -287,7 +287,7 @@ function parseV2Fields(text: string): ScannedData {
       case 'O': setLab('ast', val); break
       case 'L': setLab('alt', val); break
       case 'Ab': setLab('albumin', val); break
-      case 'I': out.inr = labVal(val).n; break
+      case 'I': { const { n, date } = labVal(val); out.inr = n; if (date) out.labDates!.inr = date; break }
       case 'T': setLab('plt', val); break
       case 'Nc': setLab('anc', val); break
       case 'Ec': setLab('aec', val); break

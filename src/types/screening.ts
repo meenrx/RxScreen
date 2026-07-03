@@ -16,6 +16,8 @@ export interface PatientInput {
   /** ค่าแล็บอื่น ๆ (จาก QR/กรอกมือ) — key เป็นตัวพิมพ์เล็กของชื่อ param เช่น k, ast, alt, bun
    *  ใช้เทียบกับ LAB_RULE.param ที่ไม่ใช่ scr/crcl/inr */
   labs?: Record<string, number>
+  /** วันที่ของค่าแล็บ (YYMMDD) keyed เหมือน labs + 'crcl'/'scr'/'inr' — ไว้บอกว่าค่าเก่าแค่ไหน */
+  labDates?: Record<string, string>
   /** true=เจาะแล้วผิดปกติ/พร่อง, false=เจาะแล้วปกติ, undefined=ยังไม่เจาะ (แยกจาก g6pd) */
   g6pd_tested?: boolean
   /** อายุครรภ์ (สัปดาห์) ถ้าตั้งครรภ์ */

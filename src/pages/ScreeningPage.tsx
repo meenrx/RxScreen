@@ -8,6 +8,7 @@ import { CollapsibleSection } from '@/components/Collapsible'
 import { SmartPatientForm } from '@/features/screening/SmartPatientForm'
 import { DrugInput } from '@/features/screening/DrugInput'
 import { DrugResultView } from '@/features/screening/DrugResultView'
+import { ScannedLabPanel } from '@/features/screening/ScannedLabPanel'
 import { AISummaryPanel } from '@/features/screening/AISummaryPanel'
 import { AllergyRiskPanel } from '@/features/screening/AllergyRiskPanel'
 import { Sticker57Panel } from '@/features/screening/Sticker57'
@@ -134,6 +135,7 @@ export default function ScreeningPage() {
       ? Array.from(new Set([...(cur.patient.diseases ?? []), ...data.diseases]))
       : cur.patient.diseases
     const labs = data.labs ? { ...(cur.patient.labs ?? {}), ...data.labs } : cur.patient.labs
+    const labDates = data.labDates ? { ...(cur.patient.labDates ?? {}), ...data.labDates } : cur.patient.labDates
     setPatient({
       ...cur.patient,
       an: data.an ?? cur.patient.an,
@@ -146,6 +148,7 @@ export default function ScreeningPage() {
       egfr: data.crcl ?? cur.patient.egfr,
       inr: data.inr ?? cur.patient.inr,
       labs,
+      labDates,
       g6pd: data.g6pd ?? cur.patient.g6pd,
       g6pd_tested: data.g6pd_tested ?? cur.patient.g6pd_tested,
       is_pregnant: data.is_pregnant ?? cur.patient.is_pregnant,
@@ -288,6 +291,7 @@ export default function ScreeningPage() {
               </div>
 
               {/* รายละเอียดผลคัดกรอง — แสดงเลย ไม่มีสรุปซ้ำซ้อน */}
+              <ScannedLabPanel patient={patient} />
               <AllergyRiskPanel drugs={drugs} />
               <SubstitutionScreenPanel drugs={drugs} />
               <DrugResultView drugs={drugs} alerts={alerts} />
