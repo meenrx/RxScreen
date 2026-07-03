@@ -14,7 +14,7 @@ import { AllergyRiskPanel } from '@/features/screening/AllergyRiskPanel'
 import { Sticker57Panel } from '@/features/screening/Sticker57'
 import { CounselingChecklist } from '@/features/screening/CounselingChecklist'
 import { PdfExportButton } from '@/features/screening/PdfExport'
-import { QrScannerModal, type ScannedData } from '@/features/screening/QrScanner'
+import { QrScannerModal, parseQrPayload, type ScannedData } from '@/features/screening/QrScanner'
 import { WarfarinScreenPanel, hasWarfarin } from '@/features/screening/WarfarinScreenPanel'
 import { DiseaseScreeningPanel } from '@/features/disease/DiseaseScreeningPanel'
 import { useScreeningData } from '@/features/screening/useScreeningData'
@@ -199,6 +199,15 @@ export default function ScreeningPage() {
     }
   }, [drugMasters, setDrugs, setPatient, setSelectedDiseases])
 
+  // สแกน QR ด้วยเครื่องสแกนที่คอม (คีย์บอร์ด) — payload เข้าช่องพิมพ์ยา → parse เป็น QR
+  const onQrText = useCallback((raw: string) => {
+    try {
+      onQrScan(parseQrPayload(raw))
+    } catch (e) {
+      toast.error('อ่าน QR ไม่สำเร็จ: ' + (e as Error).message)
+    }
+  }, [onQrScan])
+
   async function saveLog() {
     if (!user) return
     try {
@@ -269,7 +278,7 @@ export default function ScreeningPage() {
         </TabsList>
 
         <TabsContent value="drug" className="mt-4 space-y-4">
-          <DrugInput drugs={drugs} onChange={setDrugs} drugMasters={drugMasters} />
+          <DrugInput drugs={drugs} onChange={setDrugs} drugMasters={drugMasters} onQrPayload={onQrText} />
           <SmartPatientForm drugs={drugs} value={patient} onChange={setPatient} />
           {hasWarfarin(drugs) && <WarfarinScreenPanel drugs={drugs} inr={patient.inr} />}
 

@@ -13,16 +13,45 @@ interface Props {
   drugs: DrugEntry[]
   onChange: (drugs: DrugEntry[]) => void
   drugMasters?: DrugMaster[]
+  /** เมื่อสแกน QR ด้วยเครื่องสแกน (คีย์บอร์ด) แล้ว payload เข้ามาในช่องนี้ — ส่ง raw string ไปประมวลผลเป็น QR */
+  onQrPayload?: (raw: string) => void
 }
 
 const MAX_SUGGESTIONS = 12
 
-export function DrugInput({ drugs, onChange, drugMasters = [] }: Props) {
+/** ข้อความนี้เป็น payload QR (RXS) ไม่ใช่ชื่อยา? — จับจาก marker ของทุก format */
+function looksLikeQr(s: string): boolean {
+  const t = s.trim()
+  if (t.length < 8) return false
+  return (
+    /(^|\|)R:/.test(t)                       // v2/v3 drug list
+    || /(^|\|)RX:/.test(t)                    // IPD เดิม
+    || (/^N\d{5,}/.test(t) && t.includes('|'))  // ขึ้นต้น N+AN แล้วมี pipe
+    || (t.includes('|') && /(Gf|CrCl|SCr|Dx:|D:|@\d{6})/.test(t))
+    || (t.startsWith('{') && t.includes('drug'))
+  )
+}
+
+export function DrugInput({ drugs, onChange, drugMasters = [], onQrPayload }: Props) {
   const [query, setQuery] = useState('')
   const [activeIdx, setActiveIdx] = useState(0)
   const [showList, setShowList] = useState(false)
   const [adding, setAdding] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // โฟกัสช่องนี้เสมอ (บนคอม เครื่องสแกน = คีย์บอร์ด → ข้อมูลจะเข้าช่องนี้)
+  useEffect(() => { inputRef.current?.focus() }, [])
+
+  /** ตรวจ + ประมวลผล payload QR ถ้าใช่ (คืน true = จัดการแล้ว) */
+  function maybeHandleQr(value: string): boolean {
+    if (onQrPayload && looksLikeQr(value)) {
+      onQrPayload(value.trim())
+      setQuery(''); setShowList(false)
+      setTimeout(() => inputRef.current?.focus(), 0)
+      return true
+    }
+    return false
+  }
 
   const suggestions = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -63,6 +92,12 @@ export function DrugInput({ drugs, onChange, drugMasters = [] }: Props) {
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    // เครื่องสแกนส่ง Enter ท้าย payload → ถ้าเป็น QR ให้ประมวลผลเป็น QR ไม่ใช่ค้นหายา
+    if (e.key === 'Enter' && looksLikeQr(query)) {
+      e.preventDefault()
+      maybeHandleQr(query)
+      return
+    }
     if (!showList || suggestions.length === 0) {
       if (e.key === 'Enter' && query.trim()) {
         e.preventDefault()
@@ -98,7 +133,8 @@ export function DrugInput({ drugs, onChange, drugMasters = [] }: Props) {
             <Input
               ref={inputRef}
               value={query}
-              onChange={(e) => { setQuery(e.target.value); setShowList(true) }}
+              onChange={(e) => { if (maybeHandleQr(e.target.value)) return; setQuery(e.target.value); setShowList(true) }}
+              onPaste={(e) => { const t = e.clipboardData.getData('text'); if (looksLikeQr(t)) { e.preventDefault(); maybeHandleQr(t) } }}
               onFocus={() => setShowList(true)}
               onBlur={() => setTimeout(() => setShowList(false), 150)}
               onKeyDown={handleKeyDown}
