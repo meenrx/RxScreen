@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
 import { listLabRulesForDrug } from '@/features/catalog/api'
 import { cn } from '@/lib/utils'
+import { fixThaiLayout, hasThai } from '@/lib/thaiKeyboard'
 import type { DrugMaster, LabRule } from '@/types/drug'
 import type { DrugEntry } from '@/types/screening'
 
@@ -32,6 +33,14 @@ function looksLikeQr(s: string): boolean {
   )
 }
 
+/** คืน payload QR (แปลงจากไทยให้แล้วถ้าลืมสลับ layout) หรือ null ถ้าไม่ใช่ QR */
+function toQr(v: string): string | null {
+  const t = v.trim()
+  if (looksLikeQr(t)) return t
+  if (hasThai(t)) { const f = fixThaiLayout(t); if (looksLikeQr(f)) return f }  // ลืมสลับเป็น EN
+  return null
+}
+
 export function DrugInput({ drugs, onChange, drugMasters = [], onQrPayload }: Props) {
   const [query, setQuery] = useState('')
   const [activeIdx, setActiveIdx] = useState(0)
@@ -44,11 +53,12 @@ export function DrugInput({ drugs, onChange, drugMasters = [], onQrPayload }: Pr
   useEffect(() => { inputRef.current?.focus() }, [])
   useEffect(() => () => { if (qrTimer.current) clearTimeout(qrTimer.current) }, [])
 
-  /** ตรวจ + ประมวลผล payload QR ถ้าใช่ (คืน true = จัดการแล้ว) */
+  /** ตรวจ + ประมวลผล payload QR ถ้าใช่ (แปลงจากไทยให้ด้วย) — คืน true = จัดการแล้ว */
   function maybeHandleQr(value: string): boolean {
-    if (onQrPayload && looksLikeQr(value)) {
+    const qr = onQrPayload ? toQr(value) : null
+    if (onQrPayload && qr) {
       if (qrTimer.current) { clearTimeout(qrTimer.current); qrTimer.current = null }
-      onQrPayload(value.trim())
+      onQrPayload(qr)
       setQuery(''); setShowList(false)
       setTimeout(() => inputRef.current?.focus(), 0)
       return true
@@ -59,7 +69,7 @@ export function DrugInput({ drugs, onChange, drugMasters = [], onQrPayload }: Pr
   /** เครื่องสแกนพิมพ์ทีละตัวอักษรเร็วมาก — รอ 150ms ให้พิมพ์จบก่อนค่อยประมวลผล (กันตัดกลางคัน) */
   function scheduleQrCheck(value: string) {
     if (qrTimer.current) clearTimeout(qrTimer.current)
-    if (!onQrPayload || !looksLikeQr(value)) return
+    if (!onQrPayload || !toQr(value)) return
     qrTimer.current = window.setTimeout(() => { maybeHandleQr(value) }, 150)
   }
 
@@ -104,7 +114,7 @@ export function DrugInput({ drugs, onChange, drugMasters = [], onQrPayload }: Pr
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     // เครื่องสแกนส่ง Enter ท้าย payload → ประมวลผลทันที (ใช้ค่าล่าสุดจาก input จริง กัน state ตามไม่ทัน)
     const live = e.currentTarget.value
-    if (e.key === 'Enter' && looksLikeQr(live)) {
+    if (e.key === 'Enter' && toQr(live)) {
       e.preventDefault()
       maybeHandleQr(live)
       return
@@ -147,10 +157,10 @@ export function DrugInput({ drugs, onChange, drugMasters = [], onQrPayload }: Pr
               onChange={(e) => {
                 const v = e.target.value
                 setQuery(v)
-                if (looksLikeQr(v)) { setShowList(false); scheduleQrCheck(v) }  // รอพิมพ์จบ (เครื่องสแกน)
+                if (toQr(v)) { setShowList(false); scheduleQrCheck(v) }  // รอพิมพ์จบ (เครื่องสแกน) · แปลงไทยให้
                 else setShowList(true)
               }}
-              onPaste={(e) => { const t = e.clipboardData.getData('text'); if (looksLikeQr(t)) { e.preventDefault(); maybeHandleQr(t) } }}
+              onPaste={(e) => { const t = e.clipboardData.getData('text'); if (toQr(t)) { e.preventDefault(); maybeHandleQr(t) } }}
               onFocus={() => setShowList(true)}
               onBlur={() => setTimeout(() => setShowList(false), 150)}
               onKeyDown={handleKeyDown}

@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { mapAllergen } from './allergenMap'
+import { fixThaiLayout, hasThai } from '@/lib/thaiKeyboard'
 
 export interface ScannedData {
   hn?: string
@@ -352,8 +353,14 @@ function parseKeyedFields(text: string): ScannedData {
 }
 
 export function parseQrPayload(raw: string): ScannedData {
-  const text = raw.trim()
+  let text = raw.trim()
   if (!text) throw new Error('ข้อมูล QR ว่าง')
+
+  // ลืมสลับ layout เป็น EN → อักษรเป็นไทย: แปลงกลับถ้าผลลัพธ์เป็นรูปแบบ QR ที่รู้จัก
+  if (hasThai(text)) {
+    const fixed = fixThaiLayout(text)
+    if (/(^|\|)(R:|RX:|Dx:|D:)/.test(fixed) || /^N\d/.test(fixed) || fixed.startsWith('{')) text = fixed
+  }
 
   // v2/v3 (key สั้น) — ตรวจก่อน: มี segment ขึ้นต้น "R:" (รายการยา)
   if (/(^|\|)R:/.test(text)) {
