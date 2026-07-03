@@ -95,7 +95,10 @@ function labelSev(s: DdiOverride['severity']) {
 export function buildLabAlerts(drugs: DrugEntry[], labRules: LabRule[], patient: PatientInput): ScreeningAlert[] {
   const alerts: ScreeningAlert[] = []
   for (const drug of drugs) {
-    const allRulesForDrug = labRules.filter((r) => r.icode === drug.icode)
+    // warfarin: INR จัดการใน Warfarin panel แล้ว (มีคำแนะนำปรับ dose จริง) → ไม่ต้องเตือน LAB monitor ซ้ำ
+    const isWarfarin = /warfarin/i.test(`${drug.master?.generic_name ?? ''} ${drug.master?.drug_name ?? drug.drug_name ?? ''}`)
+    const allRulesForDrug = labRules.filter((r) => r.icode === drug.icode
+      && !(isWarfarin && /inr/i.test(r.param ?? '')))
     // กรองตาม indication: ใช้ rule.id เป็น key — ถ้า drug.labRules มี id ตรงกัน → คือ allowed
     const allowedIds = new Set(filterRulesByIndication(
       { ...drug, labRules: allRulesForDrug },
@@ -629,10 +632,8 @@ export function buildHadAlerts(drugs: DrugEntry[], hadRules: HadRule[] = []): Sc
     const prep = rule?.dilution ?? ref?.prep
     const maxConc = rule?.max_conc ?? ref?.maxConc
     const maxRate = rule?.max_rate ?? ref?.maxRate
-    // แสดงเสมอแบบกระชับ: Dose อย่างเดียว (เตรียม/conc/rate อยู่ใน "ดูรายละเอียด")
-    const primaryInline = dose
-      ? `💉 ${dose} · เช็คความเข้มข้น/อัตราให้ (ดูรายละเอียด)`
-      : 'double-check dose / route / patient identity ก่อนจ่าย'
+    const antidote = rule?.antidote ?? ref?.antidote
+    const note = rule?.full_note ?? ref?.note
 
     const detail = [
       dose && `💉 Dose: ${dose}`,
@@ -642,18 +643,30 @@ export function buildHadAlerts(drugs: DrugEntry[], hadRules: HadRule[] = []): Sc
       ref?.compatible && `✅ ผสมได้: ${ref.compatible}`,
       rule?.route_note,
       ref?.incompatible && `⛔ ห้ามผสม: ${ref.incompatible}`,
-      (rule?.antidote ?? ref?.antidote) && `💊 Antidote: ${rule?.antidote ?? ref?.antidote}`,
-      (rule?.full_note ?? ref?.note),
+      antidote && `💊 Antidote: ${antidote}`,
+      note,
       ref && `📚 อ้างอิง: ${ref.source} — ยืนยันกับ protocol รพ. ก่อนใช้`,
     ].filter(Boolean).join('\n')
+
+    // ไม่มีข้อมูลเฉพาะ (เตรียม/ขนาด/antidote) = HAD ทั่วไป เช่น warfarin
+    // → แค่ธงแดงพอ ไม่ต้องมี boilerplate "double-check dose/route/identity" (เภสัชรู้อยู่แล้ว)
+    const hasMonograph = !!(dose || prep || maxConc || maxRate || antidote || note)
+    if (!hasMonograph) {
+      alerts.push({
+        id: `had_${d.icode}`, type: 'HAD', severity: 'red',
+        title: `🔴 ยาความเสี่ยงสูง (HAD): ${d.master.drug_name}`,
+        detail: '', drugs: [d.icode], source: rule ?? d.master,
+      })
+      continue
+    }
 
     alerts.push({
       id: `had_${d.icode}`,
       type: 'HAD' as const,
       severity: 'red' as const,
       title: `🔴 HIGH ALERT: ${d.master.drug_name}`,
-      detail: detail || 'ยา High Alert — double check dose/route/identity ก่อนจ่าย',
-      recommendation: primaryInline || 'double-check dose / route / patient identity ก่อนจ่าย',
+      detail,
+      recommendation: dose ? `💉 ${dose} · เช็คความเข้มข้น/อัตราให้ (ดูรายละเอียด)` : undefined,
       drugs: [d.icode],
       source: rule ?? d.master,
     })
