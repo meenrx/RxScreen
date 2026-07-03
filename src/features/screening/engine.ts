@@ -5,6 +5,7 @@ import { buildRduAlerts } from './rduRules'
 import { buildQrRuleAlerts } from './qrRules'
 import { findRenalRef, pickRenalBand } from './renalDoseRef'
 import { findHadRef } from './hadRef'
+import { BEERS_2023, NO_CRUSH, G6PD_UNSAFE, LACTATION_AVOID, TERATOGEN, findRef, drugText } from './clinicalRefs'
 
 function nameEq(a: string | undefined, b: string | undefined): boolean {
   if (!a || !b) return false
@@ -735,17 +736,19 @@ export function buildDueAlerts(drugs: DrugEntry[]): ScreeningAlert[] {
 // ============ Tube feeding (no-crush warning) ============
 export function buildNoCrushAlerts(drugs: DrugEntry[], patient: PatientInput): ScreeningAlert[] {
   if (!patient.tube_feeding) return []
-  return drugs
-    .filter((d) => d.master?.no_crush)
-    .map((d) => ({
-      id: `nocrush_${d.icode}`,
-      type: 'NO_CRUSH' as const,
-      severity: 'red' as const,
-      title: `⚠️ Tube feeding + SR tablet: ${d.master!.drug_name}`,
-      detail: 'ห้ามบดเม็ดยา SR/ER · ผู้ป่วยใช้ tube feeding — ต้อง consult แพทย์เปลี่ยนรูปแบบ',
-      recommendation: 'เปลี่ยนเป็น syrup หรือ immediate-release แทน',
+  const out: ScreeningAlert[] = []
+  for (const d of drugs) {
+    const ref = findRef(NO_CRUSH, d.master?.generic_name, d.master?.drug_name ?? d.drug_name)
+    if (!d.master?.no_crush && !ref) continue
+    out.push({
+      id: `nocrush_${d.icode}`, type: 'NO_CRUSH', severity: 'red',
+      title: `⚠️ Tube feeding + ห้ามบด: ${d.master?.drug_name ?? d.icode}`,
+      detail: ref?.note ?? 'ห้ามบดเม็ดยา SR/ER — ผู้ป่วยใช้ tube feeding',
+      recommendation: 'เปลี่ยนเป็น syrup / immediate-release',
       drugs: [d.icode],
-    }))
+    })
+  }
+  return out
 }
 
 // ============ LASA ============
@@ -801,19 +804,27 @@ export function buildPregnancyAlerts(drugs: DrugEntry[], patient: PatientInput):
   const alerts: ScreeningAlert[] = []
   for (const d of drugs) {
     const cat = d.master?.pregnancy_category
-    if (!cat) continue
-    const sev: ScreeningAlert['severity'] = cat === 'X' ? 'red' : cat === 'D' ? 'orange' : cat === 'C' ? 'yellow' : 'blue'
-    if (cat === 'A' || cat === 'B') continue  // ปลอดภัย ไม่ต้องเตือน
-    alerts.push({
-      id: `preg_${d.icode}`,
-      type: 'PREG',
-      severity: sev,
-      title: `🤰 ตั้งครรภ์ + ${d.master!.drug_name} (Pregnancy ${cat})`,
-      detail: pregLabel(cat) + (patient.pregnancy_weeks ? ` · อายุครรภ์ ${patient.pregnancy_weeks} สัปดาห์` : ''),
-      recommendation: cat === 'X' ? 'ห้ามใช้ — เปลี่ยนยา' : cat === 'D' ? 'ใช้เมื่อจำเป็นเท่านั้น' : 'พิจารณา risk vs benefit',
-      drugs: [d.icode],
-      source: d.master,
-    })
+    const wk = patient.pregnancy_weeks ? ` · อายุครรภ์ ${patient.pregnancy_weeks} สัปดาห์` : ''
+    if (cat && cat !== 'A' && cat !== 'B') {
+      const sev: ScreeningAlert['severity'] = cat === 'X' ? 'red' : cat === 'D' ? 'orange' : 'yellow'
+      alerts.push({
+        id: `preg_${d.icode}`, type: 'PREG', severity: sev,
+        title: `🤰 ตั้งครรภ์ + ${d.master!.drug_name} (Pregnancy ${cat})`,
+        detail: pregLabel(cat) + wk,
+        recommendation: cat === 'X' ? 'ห้ามใช้ — เปลี่ยนยา' : cat === 'D' ? 'ใช้เมื่อจำเป็นเท่านั้น' : 'พิจารณา risk vs benefit',
+        drugs: [d.icode], source: d.master,
+      })
+    } else if (!cat) {
+      // ไม่มี category ในฐานข้อมูล → เทียบ built-in teratogen list (FDA/TERIS)
+      const t = findRef(TERATOGEN, d.master?.generic_name, d.master?.drug_name ?? d.drug_name)
+      if (t) alerts.push({
+        id: `preg_${d.icode}`, type: 'PREG', severity: t.cat === 'X' ? 'red' : 'orange',
+        title: `🤰 ตั้งครรภ์ + ${d.master?.drug_name ?? d.icode} (Cat ${t.cat})`,
+        detail: t.note + wk,
+        recommendation: t.cat === 'X' ? 'ห้ามใช้ — เปลี่ยนยา' : 'ใช้เมื่อจำเป็น/ตามไตรมาส',
+        drugs: [d.icode], source: d.master,
+      })
+    }
   }
   return alerts
 }
@@ -828,41 +839,44 @@ function pregLabel(c: 'A' | 'B' | 'C' | 'D' | 'X'): string {
 // ============ Lactation ============
 export function buildLactationAlerts(drugs: DrugEntry[], patient: PatientInput): ScreeningAlert[] {
   if (!patient.is_lactating) return []
-  return drugs
-    .filter((d) => d.master?.lactation_safe === false)
-    .map((d) => ({
-      id: `lact_${d.icode}`,
-      type: 'LACT' as const,
-      severity: 'orange' as const,
-      title: `🤱 ให้นมบุตร + ${d.master!.drug_name}`,
-      detail: 'ยานี้ไม่แนะนำในระยะให้นม — อาจผ่านน้ำนมไปสู่ทารก',
+  const out: ScreeningAlert[] = []
+  for (const d of drugs) {
+    const ref = findRef(LACTATION_AVOID, d.master?.generic_name, d.master?.drug_name ?? d.drug_name)
+    if (d.master?.lactation_safe !== false && !ref) continue
+    out.push({
+      id: `lact_${d.icode}`, type: 'LACT', severity: 'orange',
+      title: `🤱 ให้นมบุตร + ${d.master?.drug_name ?? d.icode}`,
+      detail: ref?.note ?? 'ไม่แนะนำในระยะให้นม — อาจผ่านน้ำนมไปสู่ทารก',
       recommendation: 'พิจารณาเปลี่ยนยา หรือหยุดให้นมชั่วคราว',
-      drugs: [d.icode],
-      source: d.master,
-    }))
+      drugs: [d.icode], source: d.master,
+    })
+  }
+  return out
 }
 
 // ============ Beers (elderly ≥65) ============
 export function buildBeersAlerts(drugs: DrugEntry[], patient: PatientInput): ScreeningAlert[] {
   if (!patient.age || patient.age < 65) return []
-  return drugs
-    .filter((d) => d.master?.beers_avoid_elderly)
-    .map((d) => ({
-      id: `beers_${d.icode}`,
-      type: 'BEERS' as const,
-      severity: 'orange' as const,
-      title: `👴 Beers Criteria: ${d.master!.drug_name} (อายุ ${patient.age} ปี)`,
-      detail: 'ยานี้อยู่ในรายการ Beers ที่ควรหลีกเลี่ยงในผู้สูงอายุ ≥65 ปี',
-      recommendation: 'พิจารณาเปลี่ยนยาเป็นกลุ่มที่ปลอดภัยกว่า',
-      drugs: [d.icode],
-      source: d.master,
-    }))
+  const out: ScreeningAlert[] = []
+  for (const d of drugs) {
+    const ref = findRef(BEERS_2023, d.master?.generic_name, d.master?.drug_name ?? d.drug_name)
+    if (!d.master?.beers_avoid_elderly && !ref) continue
+    out.push({
+      id: `beers_${d.icode}`, type: 'BEERS', severity: 'orange',
+      title: `👴 Beers: ${d.master?.drug_name ?? d.icode} (อายุ ${patient.age})`,
+      detail: ref?.note ?? 'อยู่ในรายการ Beers ที่ควรเลี่ยงในผู้สูงอายุ ≥65',
+      recommendation: 'พิจารณาเปลี่ยนเป็นยาที่ปลอดภัยกว่า',
+      drugs: [d.icode], source: d.master,
+    })
+  }
+  return out
 }
 
 // ============ G6PD ============
 export function buildG6pdAlerts(drugs: DrugEntry[], patient: PatientInput): ScreeningAlert[] {
   const hasG6pd = patient.g6pd === true || patient.diseases?.some((d) => d.toUpperCase() === 'G6PD')
-  const oxidantDrugs = drugs.filter((d) => d.master?.g6pd_unsafe)
+  // flag ในฐานข้อมูล หรือ built-in oxidant list (generic)
+  const oxidantDrugs = drugs.filter((d) => d.master?.g6pd_unsafe || G6PD_UNSAFE.test(drugText(d.master?.generic_name, d.master?.drug_name ?? d.drug_name)))
   if (oxidantDrugs.length === 0) return []
 
   // เจาะแล้วพร่อง → ห้ามใช้ (แดง)

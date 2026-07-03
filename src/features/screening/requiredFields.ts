@@ -1,6 +1,7 @@
 import type { DrugEntry, PatientInput } from '@/types/screening'
 import type { LabRule } from '@/types/drug'
 import { renalBasisOf } from '@/features/renal/calc'
+import { IBW_REQUIRED } from './clinicalRefs'
 
 /** กรอง labRules ตาม indication ที่ผู้ใช้เลือก (default rule = no indication → ใช้เสมอ) */
 function filterRulesByIndication(d: DrugEntry, patient: PatientInput): LabRule[] {
@@ -160,8 +161,9 @@ export function computeRequiredFields(drugs: DrugEntry[], patient: PatientInput 
       add('egfr', 'eGFR', 'mL/min', `${name} (NSAID) → ควรเช็คการทำงานของไต`, 'high')
     }
     // 1.5) ยาที่ต้องใช้ IBW → ขอส่วนสูงเพิ่ม
-    //   (Aminoglycosides, Vancomycin, Phenytoin loading dose ฯลฯ)
-    if (d.master?.requires_ibw && !syrup) {
+    //   flag ในฐานข้อมูล หรือ built-in list (aminoglycosides, vancomycin)
+    const needIbw = d.master?.requires_ibw || IBW_REQUIRED.test(`${d.master?.generic_name ?? ''} ${d.master?.drug_name ?? d.drug_name ?? ''}`.toLowerCase())
+    if (needIbw && !syrup) {
       add('age', 'อายุ', 'ปี', `${name} → ต้องการ IBW`, 'high')
       add('weight', 'น้ำหนัก', 'kg', `${name} → ต้องการ IBW`, 'high')
       add('sex', 'เพศ', undefined, `${name} → ต้องการ IBW`, 'high')
