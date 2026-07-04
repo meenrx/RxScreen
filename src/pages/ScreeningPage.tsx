@@ -303,6 +303,21 @@ export default function ScreeningPage() {
               {/* เฝ้าดูยาที่เคย off แล้วถูกสั่งซ้ำ → เด้ง popup ถามจำนวน (mount เสมอ) */}
               <InterventionReorderWatcher drugs={drugs} patient={patient} />
 
+              {/* แถบระบุ AN — ส่วนต้นสุด ให้รู้ชัดว่าเป็นผลคัดกรองของ AN ใด */}
+              <div className="rounded-xl border-2 border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 px-4 py-2.5 flex flex-wrap items-center gap-x-4 gap-y-1">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">AN</span>
+                  <span className="text-2xl font-extrabold tracking-tight text-emerald-900 dark:text-emerald-100 tabular-nums">{patient.an ?? '—'}</span>
+                </div>
+                {patient.hn && <span className="text-sm text-muted-foreground">HN {patient.hn}</span>}
+                {patient.patient_name && <span className="text-sm font-medium truncate max-w-[18ch]">{patient.patient_name}</span>}
+                {(patient.age !== undefined || patient.sex) && (
+                  <span className="text-sm text-muted-foreground">
+                    {patient.age !== undefined ? `${patient.age} ปี` : ''}{patient.sex ? `${patient.age !== undefined ? ' · ' : ''}${patient.sex === 'M' ? 'ชาย' : 'หญิง'}` : ''}
+                  </span>
+                )}
+              </div>
+
               {/* Results header */}
               <div className="flex items-center justify-between gap-2 pt-2">
                 <h2 className="text-base font-bold flex items-center gap-2">
