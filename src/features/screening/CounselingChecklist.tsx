@@ -100,6 +100,20 @@ export function CounselingChecklist({ drugs, onChange }: Props) {
 
   if (drugs.length === 0) return null
 
+  // แสดงเฉพาะยาที่ต้อง counseling "พิเศษ" — ยาที่แนะนำตามปกติ (เภสัชทำเป็น routine) ไม่ต้องขึ้น
+  const specialDrugs = drugs
+    .map((d) => ({ d, special: buildSmartChecklist(d.master, counselingMap[d.icode]) }))
+    .filter((x) => x.special.length > 0)
+
+  if (specialDrugs.length === 0) {
+    return (
+      <div className="text-sm text-muted-foreground flex items-center gap-2 px-1 py-1">
+        <span className="text-emerald-600">💊</span>
+        ไม่มียาที่ต้อง counseling พิเศษ — แนะนำการใช้ยาตามปกติได้เลย
+      </div>
+    )
+  }
+
   return (
     <Card className="soft-card">
       <CardHeader>
@@ -109,24 +123,10 @@ export function CounselingChecklist({ drugs, onChange }: Props) {
           </span>
           Counseling Checklist
         </CardTitle>
-        <CardDescription>ติ๊กเมื่ออธิบายให้ผู้ป่วยแล้ว (เลือกได้หลายข้อ)</CardDescription>
+        <CardDescription>เฉพาะยาที่ต้องแนะนำพิเศษ · ติ๊กเมื่ออธิบายให้ผู้ป่วยแล้ว</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {drugs.map((d) => {
-          const c = counselingMap[d.icode]
-          const special: string[] = buildSmartChecklist(d.master, c)
-          // ยาที่ไม่ได้ตั้งค่า counseling พิเศษ + ไม่มี flag สำคัญ → แนะนำตามปกติ
-          if (special.length === 0) {
-            return (
-              <div key={d.icode} className="border rounded-xl p-3">
-                <div className="font-medium mb-1">{d.master?.drug_name ?? d.drug_name}</div>
-                <div className="text-sm text-muted-foreground flex items-center gap-2">
-                  <span className="text-emerald-600">💊</span>
-                  ให้คำแนะนำการใช้ยาตามปกติ (ชื่อยา · วิธีใช้ · การเก็บรักษา)
-                </div>
-              </div>
-            )
-          }
+        {specialDrugs.map(({ d, special }) => {
           // มี counseling พิเศษ → checklist + ปิดท้ายด้วย "ตรวจสอบความเข้าใจ"
           const items = [...special, '✓ ตรวจสอบความเข้าใจของผู้ป่วย']
           const ck = checked[d.icode] ?? []

@@ -342,7 +342,7 @@ export default function ScreeningPage() {
 
                 <CollapsibleSection
                   title="Counseling Checklist"
-                  subtitle="ติ๊กเมื่ออธิบายผู้ป่วยแล้ว"
+                  subtitle="เฉพาะยาที่ต้องแนะนำพิเศษ"
                   icon={<div className="size-8 rounded-lg bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 grid place-items-center"><ListChecks className="size-4" /></div>}
                   defaultOpen={false}
                 >
