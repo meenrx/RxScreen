@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from 'react'
+import { useMemo, useState, useCallback, useRef, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ClipboardCheck, RotateCcw, Save, ScanLine, Pill, Stethoscope, Sparkles, ListChecks, Printer, FileText, Coins } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -25,7 +25,7 @@ import { InterventionSection } from '@/features/intervention/InterventionSection
 import { InterventionReorderWatcher } from '@/features/intervention/InterventionReorderWatcher'
 import { SubstitutionScreenPanel } from '@/features/substitution/SubstitutionScreenPanel'
 import { useActiveSubstitutions } from '@/features/substitution/hooks'
-import { logDispensing } from '@/features/history/api'
+import { logDispensing, updateDispensing } from '@/features/history/api'
 import { useAuthStore } from '@/features/auth/authStore'
 import { getConfig, getDrugByIcode, listLabRulesForDrug } from '@/features/catalog/api'
 import { toast } from 'sonner'
@@ -79,41 +79,69 @@ export default function ScreeningPage() {
     yellow: alerts.filter((a) => a.severity === 'yellow').length,
   }), [alerts])
 
-  async function autoSaveIfNeeded(): Promise<void> {
+  // เก็บ id ของ log เคสปัจจุบัน → บันทึกครั้งแรกเป็น create, ครั้งต่อไปเป็น update (ไม่ซ้ำ)
+  const caseLogId = useRef<string | undefined>(undefined)
+
+  const buildLogEntry = useCallback(() => {
     const st = useScreeningStore.getState()
-    if (!user || !st.dirty || st.drugs.length === 0) return
-    try {
-      const ref = await logDispensing({
-        hn: st.patient.hn,
-        an: st.patient.an,
-        patient_name: st.patient.patient_name,
-        age: st.patient.age,
-        weight: st.patient.weight,
-        scr: st.patient.scr,
-        allergies: st.patient.allergies,
-        is_pregnant: st.patient.is_pregnant,
-        drugs: st.drugs.map((d) => ({ icode: d.icode, drug_name: d.drug_name, sig: d.sig })),
-        alerts_count: alerts.length,
-        ...alertSummary(alerts),
-        me_status: meStatus === 'unset' ? undefined : meStatus,
-        me_level: meStatus === 'unset' ? undefined : 'B',
-        me_note: meNote || undefined,
-        ddi_count: alerts.filter((a) => a.type === 'DDI').length,
-        drp_count: alerts.filter((a) => a.type === 'DRP').length,
-        ai_summary: st.aiText,
-        pharmacist_uid: user.uid,
-        pharmacist_name: user.displayName,
-        pharmacist_lic: user.licNumber,
-      })
-      useScreeningStore.getState().markSaved(ref.id)
-      toast.success('บันทึกอัตโนมัติ')
-    } catch (e) {
-      toast.error('Auto-save ไม่สำเร็จ: ' + (e as Error).message)
+    return {
+      hn: st.patient.hn,
+      an: st.patient.an,
+      patient_name: st.patient.patient_name,
+      age: st.patient.age,
+      weight: st.patient.weight,
+      scr: st.patient.scr,
+      allergies: st.patient.allergies,
+      is_pregnant: st.patient.is_pregnant,
+      drugs: st.drugs.map((d) => ({ icode: d.icode, drug_name: d.drug_name, sig: d.sig })),
+      alerts_count: alerts.length,
+      ...alertSummary(alerts),
+      me_status: meStatus === 'unset' ? undefined : meStatus,
+      me_level: meStatus === 'unset' ? undefined : ('B' as const),
+      me_note: meNote || undefined,
+      ddi_count: alerts.filter((a) => a.type === 'DDI').length,
+      drp_count: alerts.filter((a) => a.type === 'DRP').length,
+      ai_summary: st.aiText,
+      pharmacist_uid: user!.uid,
+      pharmacist_name: user!.displayName,
+      pharmacist_lic: user!.licNumber,
     }
-  }
+  }, [alerts, meStatus, meNote, user])
+
+  /** บันทึกเคสปัจจุบัน (create ครั้งแรก / update ครั้งต่อไป) — ใช้ทั้ง auto-save และปุ่มบันทึก */
+  const saveCase = useCallback(async (opts?: { onlyIfDirty?: boolean; toast?: boolean }) => {
+    const st = useScreeningStore.getState()
+    if (!user || st.drugs.length === 0) return
+    if (opts?.onlyIfDirty && !st.dirty) return
+    try {
+      const entry = buildLogEntry()
+      if (caseLogId.current) {
+        await updateDispensing(caseLogId.current, entry)
+      } else {
+        const ref = await logDispensing(entry)
+        caseLogId.current = ref.id
+      }
+      useScreeningStore.getState().markSaved(caseLogId.current!)
+      if (opts?.toast) toast.success('บันทึกแล้ว')
+    } catch (e) {
+      toast.error('บันทึกไม่สำเร็จ: ' + (e as Error).message)
+    }
+  }, [user, buildLogEntry])
+
+  // ref ล่าสุดของ saveCase → เรียกจาก onQrScan ได้โดยไม่ต้องผูก dependency (กัน closure ค้าง)
+  const saveCaseRef = useRef(saveCase)
+  saveCaseRef.current = saveCase
+
+  // บันทึกอัตโนมัติเมื่อเภสัชประเมิน ME แล้ว (ยืนยัน/ไม่นับ) หรือแก้หมายเหตุ — debounce กันเขียนถี่
+  useEffect(() => {
+    if (meStatus === 'unset') return
+    const t = setTimeout(() => { void saveCase() }, 500)
+    return () => clearTimeout(t)
+  }, [meStatus, meNote, saveCase])
 
   async function reset() {
-    await autoSaveIfNeeded()
+    await saveCase({ onlyIfDirty: true })
+    caseLogId.current = undefined
     resetStore()
     setSelectedDiseases([])
     setLabValues({})
@@ -139,7 +167,12 @@ export default function ScreeningPage() {
     const fullPatient = !!data.an || data.age !== undefined || !!data.labs || !!data.diseases?.length || data.sex !== undefined
     const basePatient: typeof cur.patient = fullPatient ? {} : cur.patient
     const baseDrugs = fullPatient ? [] : cur.drugs
-    if (fullPatient) { setSelectedDiseases(data.diseases ?? []); setLabValues({}); setAiText(''); setMeStatus('unset'); setMeNote('') }
+    // ผู้ป่วยรายใหม่ → บันทึกเคสก่อนหน้าอัตโนมัติ แล้วเริ่มเคสใหม่ (ไม่ต้องกดบันทึกเอง)
+    if (fullPatient) {
+      await saveCaseRef.current({ onlyIfDirty: true })
+      caseLogId.current = undefined
+      setSelectedDiseases(data.diseases ?? []); setLabValues({}); setAiText(''); setMeStatus('unset'); setMeNote('')
+    }
     if (fullPatient || inMemory.length > 0) setDrugs([...baseDrugs, ...inMemory])
     const allergies = data.allergies?.length
       ? Array.from(new Set([...(basePatient.allergies ?? []), ...data.allergies]))
@@ -220,38 +253,6 @@ export default function ScreeningPage() {
     }
   }, [onQrScan])
 
-  async function saveLog() {
-    if (!user) return
-    try {
-      const ref = await logDispensing({
-        hn: patient.hn,
-        an: patient.an,
-        patient_name: patient.patient_name,
-        age: patient.age,
-        weight: patient.weight,
-        scr: patient.scr,
-        allergies: patient.allergies,
-        is_pregnant: patient.is_pregnant,
-        drugs: drugs.map((d) => ({ icode: d.icode, drug_name: d.drug_name, sig: d.sig })),
-        alerts_count: alerts.length,
-        ...alertSummary(alerts),
-        me_status: meStatus === 'unset' ? undefined : meStatus,
-        me_level: meStatus === 'unset' ? undefined : 'B',
-        me_note: meNote || undefined,
-        ddi_count: alerts.filter((a) => a.type === 'DDI').length,
-        drp_count: alerts.filter((a) => a.type === 'DRP').length,
-        ai_summary: aiText,
-        pharmacist_uid: user.uid,
-        pharmacist_name: user.displayName,
-        pharmacist_lic: user.licNumber,
-      })
-      useScreeningStore.getState().markSaved(ref.id)
-      toast.success('บันทึกประวัติเรียบร้อย')
-    } catch (e) {
-      toast.error('บันทึกไม่สำเร็จ: ' + (e as Error).message)
-    }
-  }
-
   const hasResults = drugs.length > 0
 
   return (
@@ -316,12 +317,14 @@ export default function ScreeningPage() {
                 {isLoading && <span className="text-xs text-muted-foreground">โหลด...</span>}
               </div>
 
+              {/* ประเมิน ME ขึ้นบนสุด (เด่นชัด) — บันทึกอัตโนมัติเมื่อกดยืนยัน */}
+              <MedErrorPanel alerts={alerts} status={meStatus} note={meNote} onStatus={setMeStatus} onNote={setMeNote} />
+
               {/* รายละเอียดผลคัดกรอง — แสดงเลย ไม่มีสรุปซ้ำซ้อน */}
               <ScannedLabPanel patient={patient} />
               <AllergyRiskPanel drugs={drugs} />
               <SubstitutionScreenPanel drugs={drugs} />
               <DrugResultView drugs={drugs} alerts={alerts} />
-              <MedErrorPanel alerts={alerts} status={meStatus} note={meNote} onStatus={setMeStatus} onNote={setMeNote} />
 
               {/* ส่วนรอง — จัด 2 คอลัมน์บนจอกว้าง ใช้พื้นที่คุ้ม (มือถือเรียงเดี่ยว) */}
               <div className="grid lg:grid-cols-2 gap-3 items-start">
@@ -382,7 +385,7 @@ export default function ScreeningPage() {
       {hasResults && (
         <div className="no-print sticky bottom-16 md:bottom-2 z-20 flex justify-end">
           <div className="flex gap-1.5 bg-card/95 backdrop-blur-md rounded-full border shadow-lg p-1.5">
-            <Button size="sm" variant="ghost" onClick={saveLog} className="rounded-full"><Save className="size-4" /> <span className="hidden sm:inline">บันทึก</span></Button>
+            <Button size="sm" variant="ghost" onClick={() => saveCase({ toast: true })} className="rounded-full"><Save className="size-4" /> <span className="hidden sm:inline">บันทึก</span></Button>
             <span className="w-px bg-border" />
             <PdfExportPill patient={patient} drugs={drugs} alerts={alerts} aiSummary={aiText} />
           </div>

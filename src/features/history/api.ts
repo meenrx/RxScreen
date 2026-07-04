@@ -1,4 +1,4 @@
-import { collection, query, where, orderBy, limit as fbLimit, getDocs, addDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, query, where, orderBy, limit as fbLimit, getDocs, addDoc, setDoc, doc, serverTimestamp } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import type { DispensingLog } from '@/types/drug'
 
@@ -27,6 +27,11 @@ export async function logDispensing(entry: Omit<DispensingLog, 'id' | 'createdAt
     ...stripUndefined(entry as unknown as Record<string, unknown>),
     createdAt: serverTimestamp(),
   })
+}
+
+/** อัปเดต log เดิม (เช่น เมื่อเภสัชปรับผล ME/หมายเหตุ หลังบันทึกอัตโนมัติแล้ว) */
+export async function updateDispensing(id: string, patch: Partial<DispensingLog>) {
+  await setDoc(doc(db, 'DISPENSING_LOG', id), stripUndefined(patch as unknown as Record<string, unknown>), { merge: true })
 }
 
 export async function listMyHistory(uid: string, limit = 50): Promise<DispensingLog[]> {
