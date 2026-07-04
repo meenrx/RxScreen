@@ -33,6 +33,15 @@ function looksLikeQr(s: string): boolean {
   )
 }
 
+/** ป้ายยาแบบกระชับ: generic + strength + dosage form (ตัดชื่อการค้า/สัญลักษณ์ออก) */
+function chipLabel(d: DrugEntry): string {
+  const gen = d.master?.generic_name
+  const parts = [gen && gen.charAt(0).toUpperCase() + gen.slice(1), d.master?.strength, d.master?.dosage_form ?? d.master?.form].filter(Boolean)
+  if (parts.length) return parts.join(' · ')
+  // ไม่มี generic → ใช้ชื่อยา ตัด [..] (..) * ออก
+  return (d.master?.drug_name ?? d.drug_name ?? '').replace(/\[[^\]]*\]|\([^)]*\)|\*/g, '').replace(/\s+/g, ' ').trim()
+}
+
 /** คืน payload QR (แปลงจากไทยให้แล้วถ้าลืมสลับ layout) หรือ null ถ้าไม่ใช่ QR */
 function toQr(v: string): string | null {
   const t = v.trim()
@@ -239,7 +248,7 @@ export function DrugInput({ drugs, onChange, drugMasters = [], onQrPayload }: Pr
                 <span className="size-5 shrink-0 rounded-md bg-gradient-to-br from-emerald-500 to-teal-600 text-white grid place-items-center text-[10px] font-bold">
                   {i + 1}
                 </span>
-                <span className="font-semibold truncate max-w-[20ch]">{d.drug_name}</span>
+                <span className="font-semibold truncate max-w-[26ch]" title={d.drug_name}>{chipLabel(d)}</span>
                 {d.master?.is_HAD && <span className="had-badge text-[9px]">HAD</span>}
                 <button
                   type="button"

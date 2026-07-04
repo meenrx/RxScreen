@@ -336,6 +336,10 @@ export interface DispensingLog {
   yellow_count?: number
   /** ชนิด alert ที่พบ (dedupe ต่อการคัดกรอง) เช่น ['DDI','RENAL'] — ใช้หา "ประเด็นที่พบบ่อย" */
   alert_types?: string[]
+  /** การประเมิน Medication Error โดยเภสัชกร (คัดกรองก่อนจ่าย = NCC MERP ระดับ B) */
+  me_status?: 'confirmed' | 'not_me'
+  me_level?: 'B'
+  me_note?: string
   ddi_count: number
   drp_count: number
   ai_summary?: string

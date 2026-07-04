@@ -9,6 +9,7 @@ import { SmartPatientForm } from '@/features/screening/SmartPatientForm'
 import { DrugInput } from '@/features/screening/DrugInput'
 import { DrugResultView } from '@/features/screening/DrugResultView'
 import { ScannedLabPanel } from '@/features/screening/ScannedLabPanel'
+import { MedErrorPanel, type MeStatus } from '@/features/screening/MedErrorPanel'
 import { AISummaryPanel } from '@/features/screening/AISummaryPanel'
 import { AllergyRiskPanel } from '@/features/screening/AllergyRiskPanel'
 import { Sticker57Panel } from '@/features/screening/Sticker57'
@@ -57,6 +58,8 @@ export default function ScreeningPage() {
   const [qrOpen, setQrOpen] = useState(false)
   const [selectedDiseases, setSelectedDiseases] = useState<string[]>([])
   const [labValues, setLabValues] = useState<Record<string, number | undefined>>({})
+  const [meStatus, setMeStatus] = useState<MeStatus>('unset')
+  const [meNote, setMeNote] = useState('')
 
   const user = useAuthStore((s) => s.user)
   const { drugMasters, labRules, ddiList, diseaseRules, isLoading } = useScreeningData()
@@ -92,6 +95,9 @@ export default function ScreeningPage() {
         drugs: st.drugs.map((d) => ({ icode: d.icode, drug_name: d.drug_name, sig: d.sig })),
         alerts_count: alerts.length,
         ...alertSummary(alerts),
+        me_status: meStatus === 'unset' ? undefined : meStatus,
+        me_level: meStatus === 'unset' ? undefined : 'B',
+        me_note: meNote || undefined,
         ddi_count: alerts.filter((a) => a.type === 'DDI').length,
         drp_count: alerts.filter((a) => a.type === 'DRP').length,
         ai_summary: st.aiText,
@@ -111,6 +117,8 @@ export default function ScreeningPage() {
     resetStore()
     setSelectedDiseases([])
     setLabValues({})
+    setMeStatus('unset')
+    setMeNote('')
   }
 
   const onQrScan = useCallback(async (data: ScannedData) => {
@@ -131,7 +139,7 @@ export default function ScreeningPage() {
     const fullPatient = !!data.an || data.age !== undefined || !!data.labs || !!data.diseases?.length || data.sex !== undefined
     const basePatient: typeof cur.patient = fullPatient ? {} : cur.patient
     const baseDrugs = fullPatient ? [] : cur.drugs
-    if (fullPatient) { setSelectedDiseases(data.diseases ?? []); setLabValues({}); setAiText('') }
+    if (fullPatient) { setSelectedDiseases(data.diseases ?? []); setLabValues({}); setAiText(''); setMeStatus('unset'); setMeNote('') }
     if (fullPatient || inMemory.length > 0) setDrugs([...baseDrugs, ...inMemory])
     const allergies = data.allergies?.length
       ? Array.from(new Set([...(basePatient.allergies ?? []), ...data.allergies]))
@@ -201,7 +209,7 @@ export default function ScreeningPage() {
     if (inMemory.length === 0 && fetchedEntries.length === 0 && notFound.length === 0) {
       toast.warning('อ่าน QR ได้ แต่ไม่พบรายการยาในข้อมูล — ตรวจรูปแบบ QR หรือใช้ช่อง "วาง/พิมพ์"')
     }
-  }, [drugMasters, setDrugs, setPatient, setSelectedDiseases, setLabValues, setAiText])
+  }, [drugMasters, setDrugs, setPatient, setSelectedDiseases, setLabValues, setAiText, setMeStatus, setMeNote])
 
   // สแกน QR ด้วยเครื่องสแกนที่คอม (คีย์บอร์ด) — payload เข้าช่องพิมพ์ยา → parse เป็น QR
   const onQrText = useCallback((raw: string) => {
@@ -227,6 +235,9 @@ export default function ScreeningPage() {
         drugs: drugs.map((d) => ({ icode: d.icode, drug_name: d.drug_name, sig: d.sig })),
         alerts_count: alerts.length,
         ...alertSummary(alerts),
+        me_status: meStatus === 'unset' ? undefined : meStatus,
+        me_level: meStatus === 'unset' ? undefined : 'B',
+        me_note: meNote || undefined,
         ddi_count: alerts.filter((a) => a.type === 'DDI').length,
         drp_count: alerts.filter((a) => a.type === 'DRP').length,
         ai_summary: aiText,
@@ -310,6 +321,7 @@ export default function ScreeningPage() {
               <AllergyRiskPanel drugs={drugs} />
               <SubstitutionScreenPanel drugs={drugs} />
               <DrugResultView drugs={drugs} alerts={alerts} />
+              <MedErrorPanel alerts={alerts} status={meStatus} note={meNote} onStatus={setMeStatus} onNote={setMeNote} />
 
               {/* ส่วนรอง — จัด 2 คอลัมน์บนจอกว้าง ใช้พื้นที่คุ้ม (มือถือเรียงเดี่ยว) */}
               <div className="grid lg:grid-cols-2 gap-3 items-start">
