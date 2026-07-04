@@ -148,7 +148,20 @@ export function buildQrRuleAlerts(drugs: DrugEntry[], p: PatientInput): Screenin
       push({ id: 'qr_dm_gap', type: 'OMIT', severity: 'yellow', title: `น้ำตาลสูง (${vals}) แต่ยังไม่มียาเบาหวาน`, detail: `ควรพิจารณาเริ่มยาเบาหวาน${staleNote(p, a1cHi ? 'hba1c' : 'fbs')}`, recommendation: 'เริ่ม/เพิ่มยาเบาหวาน', drugs: [] })
     }
   }
-  if (labs.fbs !== undefined && labs.fbs < 70 && dmDrugs.length) push({ id: 'qr_dm_hypo', type: 'LAB', severity: 'orange', title: `⚠️ น้ำตาลต่ำ ${labs.fbs} < 70 + ${su.length ? 'sulfonylurea' : 'insulin'}`, detail: `เสี่ยง hypoglycemia: ${names(dmDrugs)}${(p.age ?? 0) >= 65 ? ' (สูงอายุ — ระวังมาก)' : ''}${staleNote(p, 'fbs')}`, recommendation: 'ระวัง/ลดขนาด โดยเฉพาะไตเสื่อม/สูงอายุ', drugs: icodes(dmDrugs) })
+  // Hypoglycemia (ADA): FBS < 54 = รุนแรง (แดง) · < 70 = level-1 (ส้ม)
+  // เตือนแม้ "ไม่มียาเบาหวาน" ด้วย — ให้ผู้คัดกรองหาสาเหตุ (ยาอื่น/ภาวะผู้ป่วย)
+  if (labs.fbs !== undefined && labs.fbs < 70) {
+    const severe = labs.fbs < 54
+    const elderly = (p.age ?? 0) >= 65
+    const sev: ScreeningAlert['severity'] = severe ? 'red' : 'orange'
+    const head = severe ? '🚨 น้ำตาลต่ำรุนแรง' : '⚠️ น้ำตาลต่ำ'
+    if (dmDrugs.length) {
+      const culprit = su.length ? 'sulfonylurea' : inGroup(drugs, G.insulin).length ? 'insulin' : 'ยาเบาหวาน'
+      push({ id: 'qr_dm_hypo', type: 'LAB', severity: sev, title: `${head} ${labs.fbs} < ${severe ? 54 : 70} + ${culprit}`, detail: `เสี่ยง hypoglycemia: ${names(dmDrugs)}${elderly ? ' (สูงอายุ — ระวังมาก)' : ''}${staleNote(p, 'fbs')}`, recommendation: severe ? 'แก้ไขด่วน (glucose/อมลูกอม) + ลด/ทบทวนยาเบาหวานทันที' : 'ระวัง/ลดขนาด โดยเฉพาะไตเสื่อม/สูงอายุ', drugs: icodes(dmDrugs) })
+    } else {
+      push({ id: 'qr_hypo_nodm', type: 'LAB', severity: sev, title: `${head} ${labs.fbs} < ${severe ? 54 : 70}`, detail: `ไม่มียาเบาหวานในรายการ — ตรวจสอบสาเหตุ (ยาอื่นที่ทำให้น้ำตาลต่ำ / ไตเสื่อม / ติดเชื้อ / งดอาหาร)${staleNote(p, 'fbs')}`, recommendation: 'หาสาเหตุ + แก้ไขน้ำตาลต่ำ', drugs: [] })
+    }
+  }
 
   // ---- 3.9 G6PD deficient + oxidant ----
   const g6pdDef = p.g6pd === true
