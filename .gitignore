@@ -11,3 +11,6 @@ firebase-debug.log
 .vscode/*
 !.vscode/extensions.json
 .idea
+
+# local throwaway scripts (may contain credentials)
+scratchpad/
