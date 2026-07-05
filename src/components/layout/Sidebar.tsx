@@ -1,13 +1,14 @@
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, ClipboardCheck, History,
-  Settings, Database, BookOpen, UserSearch, HelpCircle, Pill, Wrench,
+  Settings, Database, BookOpen, UserSearch, HelpCircle, Pill, Wrench, Layers,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/features/auth/authStore'
 
 const nav = [
   { to: '/', label: 'คัดกรองใบสั่งยา', icon: ClipboardCheck, color: 'text-emerald-600' },
+  { to: '/batch', label: 'คัดกรองทั้งหมด', icon: Layers, color: 'text-indigo-600' },
   { to: '/tools', label: 'เครื่องมือ', icon: Wrench, color: 'text-violet-600' },
   { to: '/dashboard', label: 'ภาพรวม', icon: LayoutDashboard, color: 'text-cyan-600' },
   { to: '/druginfo', label: 'ค้นข้อมูลยา', icon: BookOpen, color: 'text-sky-600' },

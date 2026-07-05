@@ -4,6 +4,7 @@ import { AppLayout } from '@/components/layout/AppLayout'
 import LoginPage from '@/pages/LoginPage'
 import DashboardPage from '@/pages/DashboardPage'
 import ScreeningPage from '@/pages/ScreeningPage'
+import BatchScreenPage from '@/pages/BatchScreenPage'
 import HistoryPage from '@/pages/HistoryPage'
 import DrugInfoPage from '@/pages/DrugInfoPage'
 import PatientHistoryPage from '@/pages/PatientHistoryPage'
@@ -22,6 +23,7 @@ export const router = createBrowserRouter([
         children: [
           { path: '/', element: <ScreeningPage /> },
           { path: '/screening', element: <ScreeningPage /> },
+          { path: '/batch', element: <BatchScreenPage /> },
           { path: '/dashboard', element: <DashboardPage /> },
           { path: '/druginfo', element: <DrugInfoPage /> },
           { path: '/patient-history', element: <PatientHistoryPage /> },
