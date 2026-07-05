@@ -1,0 +1,35 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="40" y1="24" x2="472" y2="500" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#34d399"/>
+      <stop offset="0.5" stop-color="#10b981"/>
+      <stop offset="1" stop-color="#0d9488"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.32" cy="0.24" r="0.85">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.30"/>
+      <stop offset="0.55" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="shield" x1="256" y1="96" x2="256" y2="420" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#e9fbf4"/>
+    </linearGradient>
+  </defs>
+
+  <!-- rounded-square app tile for browser tab -->
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <rect width="512" height="512" rx="112" fill="url(#glow)"/>
+
+  <path d="M256 104
+           C300 122 330 130 356 134
+           C362 135 366 139 366 146
+           L366 244
+           C366 322 322 372 256 410
+           C190 372 146 322 146 244
+           L146 146
+           C146 139 150 135 156 134
+           C182 130 212 122 256 104 Z"
+        fill="url(#shield)"/>
+  <path d="M206 254 L242 292 L318 206"
+        fill="none" stroke="#0d9488" stroke-width="30"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
