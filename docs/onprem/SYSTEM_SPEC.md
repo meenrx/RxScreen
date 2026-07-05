@@ -172,5 +172,11 @@ no-crush (SR) · LASA · RDU (CKD stage3 ฯลฯ) · Triple Whammy · bleeding
 - Engine: `src/features/screening/engine.ts`, `qrRules.ts`, `clinicalRefs.ts`, `rduRules.ts`, `hadRef.ts`
 - คำนวณ: `src/features/renal/calc.ts` (Cockcroft-Gault, ขนาดยาเด็ก)
 - UI: `src/features/screening/*` (DrugResultView, ScannedLabPanel, WarfarinScreenPanel, MedErrorPanel, DrugInput)
-- ฐานกฎปัจจุบันอยู่ Firestore (DRUG_MASTER, LAB_RULES, HAD_RULES, DISEASE_RULES ...) →
-  **ย้ายเป็นตารางในฐาน rxscreen** (หรือ import ครั้งเดียว) เพื่อ on-prem เต็มรูปแบบ
+- ฐานกฎปัจจุบันอยู่ Firestore → **export แล้วเป็น `rxscreen_rules_seed.sql`** (import เข้าฐาน rxscreen ได้เลย)
+  - `rxrule_drug_master` (534) · `rxrule_lab_rules` (224 — รวมขนาดยาเด็ก/warfarin/K ทิศทาง/renal dose_meta)
+  - `rxrule_had_rules` (22) · `rxrule_disease_rules` (31) · `rxrule_drug_counseling` (95)
+  - `rxrule_warfarin_inr` (7) · `rxrule_warfarin_twd` (36) · `rxrule_ddi_override` (139)
+  - แต่ละแถวเก็บทุก field เป็น `data JSON` + คอลัมน์ `icode` → แอปอ่าน JSON map เป็น `DrugMaster`/`LabRule`
+    เหมือนตอนใช้ Firestore (โครง interface เดิมใน `src/types/drug.ts`)
+  - ⛔ **ไม่มี AI / ไม่มี API ภายนอก** — ตัด CONFIG (ที่เคยมี API key) ออก; ระบบ on-prem คัดกรองด้วย
+    rules engine offline ล้วน ไม่ต่อออกอินเทอร์เน็ตเลย (ถ้ามีโค้ด AI summary เดิม ให้ปิด/ถอดทิ้ง)
