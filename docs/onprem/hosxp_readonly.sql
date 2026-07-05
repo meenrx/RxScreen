@@ -12,9 +12,16 @@
 --    ชื่อคอลัมน์อ้างอิงสคีมา HOSxP — DBA ปรับให้ตรงเวอร์ชันของ รพ.
 
 -- 1.1 การรับผู้ป่วยใน (AN ↔ HN, วอร์ด, วันรับ/จำหน่าย)
+--     + อายุ(ตัวเลข)/เพศ/น้ำหนัก — จำเป็นต่อ Cockcroft-Gault, ขนาดยาเด็ก, Beers
+--     ⚠️ เปิดเผย "อายุเป็นปี (ตัวเลข)" ไม่ใช่วันเกิด → ลดความเสี่ยง PDPA
 CREATE OR REPLACE SQL SECURITY DEFINER VIEW rxs_admission AS
-  SELECT i.an, i.hn, i.ward, i.regdate, i.dchdate, i.spclty
-  FROM ipt i
+  SELECT i.an, i.hn, i.ward, i.regdate, i.dchdate, i.spclty,
+         TIMESTAMPDIFF(YEAR, p.birthday, CURRENT_DATE) AS age_years,
+         p.sex,                                   -- 1=ชาย 2=หญิง (ตามรหัส HOSxP)
+         v.bw AS weight_kg                        -- น้ำหนักล่าสุด (จาก vital sign)
+  FROM  ipt i
+  JOIN  patient p ON p.hn = i.hn
+  LEFT  JOIN (SELECT vs.vn, vs.bw FROM opdscreen vs) v ON v.vn = i.vn
   WHERE i.dchdate IS NULL OR i.dchdate >= (CURRENT_DATE - INTERVAL 2 DAY);
 
 -- 1.2 คำสั่งใช้ยาของแพทย์ (ผูก generic_name เพื่อคัดกรองข้ามกลุ่ม/ขนาด)
