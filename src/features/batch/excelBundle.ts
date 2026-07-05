@@ -126,7 +126,7 @@ function parseSig(sig: string): { route?: string; prn: boolean; meal?: string } 
   return { route, prn, meal }
 }
 
-export interface Bundle { an: string; patient: PatientInput; drugs: DrugEntry[]; ward?: string }
+export interface Bundle { an: string; patient: PatientInput; drugs: DrugEntry[]; ward?: string; dx?: string[] }
 
 /** รวม 5 ไฟล์ → bundle ต่อคนไข้ (group ด้วย AN) + คำนวณ CrCl/ANC/AEC */
 export function buildBundles(
@@ -186,6 +186,7 @@ export function buildBundles(
     if (egfr !== undefined && labDates.scr) labDates.crcl = labDates.scr
 
     const dxRows = dxByAn.get(an) ?? []
+    const dx = [...new Set(dxRows.map((r) => s(r.icd_name) || s(r.icd10)).filter(Boolean))]
     const { diseases, is_pregnant } = icdToDiseases(dxRows.map((r) => s(r.icd10)), dxRows.map((r) => s(r.icd_name)), age)
     const allergies = (allergyByAn.get(an) ?? []).map((r) => s(r.agent)).filter(Boolean)
 
@@ -211,7 +212,7 @@ export function buildBundles(
       }
     })
 
-    bundles.push({ an, patient, drugs, ward })
+    bundles.push({ an, patient, drugs, ward, dx })
   }
   bundles.sort((x, y) => (x.ward ?? '').localeCompare(y.ward ?? '') || x.an.localeCompare(y.an))
   return bundles

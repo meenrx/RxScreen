@@ -151,7 +151,7 @@ export default function BatchScreenPage() {
   }
 
   return (
-    <div className="space-y-4 max-w-6xl mx-auto pb-20">
+    <div className="space-y-4 w-full pb-20">
       <header className="flex items-center gap-2.5">
         <div className="size-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 grid place-items-center text-white shadow-sm">
           <Layers className="size-5" />
@@ -265,64 +265,83 @@ function PatientCard({ r, onMute }: { r: Result; onMute: (a: ScreeningAlert) => 
   const worst = r.alerts.some((a) => a.severity === 'red') ? 'red' : r.alerts.some((a) => a.severity === 'orange') ? 'orange' : r.alerts.length ? 'yellow' : 'green'
   const [open, setOpen] = useState(worst === 'red')
   const sorted = [...r.alerts].sort((a, b) => SEV_ORDER.indexOf(a.severity) - SEV_ORDER.indexOf(b.severity))
+  // ยาที่ระบบเตือน "แพ้/แพ้ข้าม" → ไฮไลท์แดงในรายการยา
+  const allergyIcodes = new Set(r.alerts.filter((a) => a.type === 'ALLERGY').flatMap((a) => a.drugs ?? []))
 
   return (
     <div className={cn('rounded-xl border-2 bg-card overflow-hidden', worst === 'red' ? 'border-red-300 dark:border-red-800' : worst === 'orange' ? 'border-orange-200' : 'border-border')}>
-      <button type="button" onClick={() => setOpen((o) => !o)} className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-accent/50">
-        <div className="flex items-baseline gap-2 min-w-0">
-          <span className="text-xs font-semibold text-muted-foreground shrink-0">AN</span>
-          <span className="text-lg font-extrabold tabular-nums">{r.an}</span>
+      <button type="button" onClick={() => setOpen((o) => !o)} className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-accent/50">
+        <div className="flex items-baseline gap-1.5 min-w-0">
+          <span className="text-[10px] font-semibold text-muted-foreground shrink-0">AN</span>
+          <span className="text-base font-extrabold tabular-nums">{r.an}</span>
           {r.ward && <span className="text-xs text-muted-foreground shrink-0">· {r.ward}</span>}
           <span className="text-xs text-muted-foreground truncate">
-            · {r.patient.age ?? '?'} ปี {r.patient.sex === 'M' ? 'ชาย' : r.patient.sex === 'F' ? 'หญิง' : ''}
-            {r.patient.weight ? ` · ${r.patient.weight} kg` : ''}
+            · {r.patient.age ?? '?'}ปี {r.patient.sex === 'M' ? 'ช' : r.patient.sex === 'F' ? 'ญ' : ''}
+            {r.patient.weight ? ` · ${r.patient.weight}kg` : ''}
             {r.patient.egfr !== undefined ? ` · CrCl ${r.patient.egfr}` : ''}
             {r.patient.is_pregnant ? ' · 🤰' : ''}
+            {r.patient.allergies?.length ? ' · ⚠️แพ้ยา' : ''}
             {r.drugs.length ? ` · ยา ${r.drugs.length}` : ''}
           </span>
         </div>
         <div className="ml-auto flex items-center gap-1.5 shrink-0">
-          {counts.length ? counts.map(({ s, n }) => <span key={s} className="text-sm">{SEV[s]} {n}</span>)
+          {counts.length ? counts.map(({ s, n }) => <span key={s} className="text-sm">{SEV[s]}{n}</span>)
             : <Badge variant="green">ปกติ</Badge>}
           <ChevronDown className={cn('size-4 text-muted-foreground transition', open && 'rotate-180')} />
         </div>
       </button>
       {open && (
-        <div className="px-4 pb-3 pt-1 space-y-2 border-t">
-          {sorted.map((a) => (
-            <div key={a.id} className="group flex items-start gap-2 text-sm">
-              <span className="mt-0.5 shrink-0">{SEV[a.severity]}</span>
-              <div className="min-w-0 flex-1">
-                <div className="font-medium">{a.title}</div>
-                {a.recommendation && <div className="text-xs text-emerald-700 dark:text-emerald-400">→ {a.recommendation}</div>}
-                {a.detail && <div className="text-xs text-muted-foreground">{a.detail}</div>}
-              </div>
-              <button type="button" onClick={() => onMute(a)} title="ไม่ต้องแสดงกรณีนี้อีก"
-                className="shrink-0 text-muted-foreground/50 hover:text-amber-600 opacity-0 group-hover:opacity-100 transition p-1">
-                <BellOff className="size-3.5" />
-              </button>
-            </div>
-          ))}
-          {/* ยา + วิธีใช้ที่แพทย์สั่ง (จาก q3) — โชว์ sig เต็ม ให้เภสัชวิเคราะห์เอง */}
-          {r.drugs.length > 0 && (
-            <div className="pt-1">
-              <div className="text-xs font-semibold text-muted-foreground mb-1">💊 ยาที่แพทย์สั่ง + วิธีใช้ ({r.drugs.length})</div>
-              <div className="space-y-1 text-xs">
-                {r.drugs.map((d, i) => (
-                  <div key={d.icode + i} className="border-l-2 border-muted pl-2 py-0.5">
-                    <div>
-                      <b>{d.master?.generic_name || d.drug_name}</b>
-                      {d.strength_mg ? ` ${d.strength_mg}mg` : d.master?.strength ? ` ${d.master.strength}` : ''}
-                      {d.per_dose || d.frequency ? <span className="text-muted-foreground"> · ×{d.per_dose ?? '?'} {d.frequency ?? ''}</span> : ''}
-                      {d.daily_mg ? <b className="text-foreground"> = {d.daily_mg} mg/วัน</b> : ''}
-                      {d.prn ? <span className="text-amber-600"> · PRN</span> : ''}
-                    </div>
-                    <div className={cn('mt-0.5', d.sig ? 'text-muted-foreground' : 'text-muted-foreground/70 italic')}>📝 {usageText(d)}</div>
+        <div className="border-t px-3 py-2 text-xs">
+          {/* Dx + ประวัติแพ้ยา (บรรทัดเดียว) */}
+          <div className="flex flex-wrap gap-x-5 gap-y-0.5 mb-1.5 pb-1.5 border-b">
+            {r.dx?.length ? <span className="min-w-0"><b className="text-foreground">📋 Dx:</b> {r.dx.join(' · ')}</span> : null}
+            {r.patient.allergies?.length
+              ? <span className="text-amber-700 dark:text-amber-400"><b>⚠️ แพ้:</b> {r.patient.allergies.join(', ')}</span>
+              : <span className="text-muted-foreground/70">แพ้ยา: ไม่มีประวัติ</span>}
+          </div>
+          {/* 2 คอลัมน์บนจอกว้าง: ปัญหา | ยาที่สั่ง — ใช้พื้นที่แนวนอนคุ้ม */}
+          <div className="grid lg:grid-cols-2 gap-x-6 gap-y-2">
+            <div className="space-y-1">
+              {sorted.length === 0 && <div className="text-muted-foreground">✓ ไม่พบปัญหา</div>}
+              {sorted.map((a) => (
+                <div key={a.id} className="group flex items-start gap-1.5">
+                  <span className="mt-px shrink-0">{SEV[a.severity]}</span>
+                  <div className="min-w-0 flex-1 leading-snug">
+                    <span className="font-medium">{a.title}</span>
+                    {a.recommendation && <span className="text-emerald-700 dark:text-emerald-400"> → {a.recommendation}</span>}
+                    {a.detail && <div className="text-muted-foreground">{a.detail}</div>}
                   </div>
-                ))}
-              </div>
+                  <button type="button" onClick={() => onMute(a)} title="ไม่ต้องแสดงกรณีนี้อีก"
+                    className="shrink-0 text-muted-foreground/40 hover:text-amber-600 opacity-0 group-hover:opacity-100 transition p-0.5">
+                    <BellOff className="size-3.5" />
+                  </button>
+                </div>
+              ))}
             </div>
-          )}
+            {r.drugs.length > 0 && (
+              <div>
+                <div className="font-semibold text-muted-foreground mb-1">💊 ยาที่แพทย์สั่ง + วิธีใช้ ({r.drugs.length})</div>
+                <div className="space-y-0.5">
+                  {r.drugs.map((d, i) => {
+                    const risky = allergyIcodes.has(d.icode)
+                    return (
+                      <div key={d.icode + i} className={cn('leading-snug', risky && 'bg-red-50 dark:bg-red-950/30 rounded px-1 -mx-1')}>
+                        <span>
+                          <b className={risky ? 'text-red-600 dark:text-red-400' : ''}>{d.master?.generic_name || d.drug_name}</b>
+                          {risky && <span className="text-red-600 dark:text-red-400 font-semibold"> ⚠️เสี่ยงแพ้ข้าม</span>}
+                          {d.strength_mg ? ` ${d.strength_mg}mg` : d.master?.strength ? ` ${d.master.strength}` : ''}
+                          {d.per_dose || d.frequency ? <span className="text-muted-foreground"> ·×{d.per_dose ?? '?'} {d.frequency ?? ''}</span> : ''}
+                          {d.daily_mg ? <b> = {d.daily_mg} mg/วัน</b> : ''}
+                          {d.prn ? <span className="text-amber-600"> ·PRN</span> : ''}
+                          <span className={cn('text-muted-foreground', !d.sig && 'italic opacity-70')}> — {usageText(d)}</span>
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

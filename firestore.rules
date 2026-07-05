@@ -169,6 +169,12 @@ service cloud.firestore {
       allow update, delete: if hasAnyRole(['admin', 'pharmacist']);
     }
 
+    // === ALERT_MUTES — เกณฑ์ที่เภสัชกดปิดเตือน (ซ่อนกรณีที่ไม่ใช่ปัญหา) ===
+    match /ALERT_MUTES/{docId} {
+      allow read: if isActive();
+      allow write: if hasAnyRole(['admin', 'pharmacist']);
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

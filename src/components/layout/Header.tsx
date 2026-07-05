@@ -1,4 +1,4 @@
-import { LogOut, Menu, Pill, Sparkles, Moon, Sun, HelpCircle } from 'lucide-react'
+import { LogOut, PanelLeft, Pill, Sparkles, Moon, Sun, HelpCircle } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import {
@@ -36,8 +36,8 @@ export function Header({ onMenuClick }: Props) {
 
   return (
     <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b bg-white/80 dark:bg-slate-900/80 backdrop-blur-md px-4 no-print">
-      <Button variant="ghost" size="icon" className="md:hidden" onClick={onMenuClick}>
-        <Menu className="size-5" />
+      <Button variant="ghost" size="icon" onClick={onMenuClick} title="ซ่อน/แสดงเมนู">
+        <PanelLeft className="size-5" />
       </Button>
       <div className="flex items-center gap-2 md:hidden">
         <div className="size-8 rounded-lg bg-gradient-to-br from-cyan-500 to-sky-600 grid place-items-center text-white">
