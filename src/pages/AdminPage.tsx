@@ -8,6 +8,7 @@ import { DiseaseAdmin } from '@/features/admin/DiseaseAdmin'
 import { UsersAdmin } from '@/features/admin/UsersAdmin'
 import { HadRuleAdmin } from '@/features/admin/HadRuleAdmin'
 import { RenalRefAdmin } from '@/features/admin/RenalRefAdmin'
+import { AlertMuteAdmin } from '@/features/admin/AlertMuteAdmin'
 
 export default function AdminPage() {
   const [tab, setTab] = useState('drugs')
@@ -26,6 +27,7 @@ export default function AdminPage() {
           <TabsTrigger value="had">🔴 HAD</TabsTrigger>
           <TabsTrigger value="counseling">Counseling</TabsTrigger>
           <TabsTrigger value="disease">Disease</TabsTrigger>
+          <TabsTrigger value="mute">🔕 ปิดเตือน</TabsTrigger>
           <TabsTrigger value="users">ผู้ใช้</TabsTrigger>
         </TabsList>
         <TabsContent value="drugs"><DrugMasterAdmin /></TabsContent>
@@ -35,6 +37,7 @@ export default function AdminPage() {
         <TabsContent value="had"><HadRuleAdmin /></TabsContent>
         <TabsContent value="counseling"><CounselingAdmin /></TabsContent>
         <TabsContent value="disease"><DiseaseAdmin /></TabsContent>
+        <TabsContent value="mute"><AlertMuteAdmin /></TabsContent>
         <TabsContent value="users"><UsersAdmin /></TabsContent>
       </Tabs>
     </div>

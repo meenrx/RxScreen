@@ -1,12 +1,18 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
-import { Upload, FileSpreadsheet, Layers, Download, Loader2, CheckCircle2, AlertCircle, ChevronDown, FolderClock } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
+import { Upload, FileSpreadsheet, Layers, Download, Loader2, CheckCircle2, AlertCircle, ChevronDown, FolderClock, BellOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Textarea } from '@/components/ui/textarea'
+import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import { useScreeningData } from '@/features/screening/useScreeningData'
 import { runScreening } from '@/features/screening/engine'
 import { parseWorkbook, detectKind, buildBundles, KIND_LABEL, FILE_KINDS, type Bundle } from '@/features/batch/excelBundle'
 import { saveBatch, loadBatch, clearBatch } from '@/features/batch/batchStore'
+import { useMutes, addMute, muteKey, filterMuted } from '@/features/screening/alertMute'
+import { useAuthStore } from '@/features/auth/authStore'
+import { toast } from 'sonner'
 import type { ScreeningAlert } from '@/types/screening'
 
 type Loaded = Record<string, { name: string; rows: Record<string, unknown>[] }>
@@ -28,12 +34,28 @@ function usageText(d: Result['drugs'][number]): string {
 
 export default function BatchScreenPage() {
   const { drugMasters, labRules, ddiList, diseaseRules, isLoading } = useScreeningData()
+  const user = useAuthStore((s) => s.user)
+  const qc = useQueryClient()
+  const { data: mutes } = useMutes()
+  const mutedIds = useMemo(() => new Set((mutes ?? []).map((m) => m.id)), [mutes])
+  const [muteTarget, setMuteTarget] = useState<ScreeningAlert | null>(null)
+  const [muteNote, setMuteNote] = useState('')
   const [loaded, setLoaded] = useState<Loaded>({})
   const [results, setResults] = useState<Result[] | null>(null)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const [restored, setRestored] = useState(false)   // แสดงข้อมูลที่บันทึกไว้ (ยังไม่แนบใหม่)
   const [savedAt, setSavedAt] = useState<number | null>(null)
+
+  async function confirmMute() {
+    if (!muteTarget) return
+    try {
+      await addMute({ id: muteKey(muteTarget), type: muteTarget.type, drugs: muteTarget.drugs ?? [], label: muteTarget.title, note: muteNote || undefined }, user?.uid)
+      await qc.invalidateQueries({ queryKey: ['alert-mutes'] })
+      toast.success('ปิดเตือนกรณีนี้แล้ว — จัดการได้ในเมนูจัดการฐานข้อมูล')
+    } catch (e) { toast.error('ปิดเตือนไม่สำเร็จ: ' + (e as Error).message) }
+    setMuteTarget(null); setMuteNote('')
+  }
 
   // โหลด batch ล่าสุดที่บันทึกไว้ตอนเปิดหน้า
   useEffect(() => {
@@ -81,12 +103,15 @@ export default function BatchScreenPage() {
 
   function clearAll() { setLoaded({}); setResults(null); setRestored(false); setSavedAt(null); clearBatch().catch(() => {}) }
 
+  // ตัด alert ที่ถูกปิดเตือนออก (reactive — ไม่ต้องคัดกรองใหม่)
+  const view = useMemo(() => results?.map((r) => ({ ...r, alerts: filterMuted(r.alerts, mutedIds) })) ?? null, [results, mutedIds])
+
   const summary = useMemo(() => {
-    if (!results) return null
+    if (!view) return null
     const c = { red: 0, orange: 0, yellow: 0, blue: 0 }
     let withRed = 0
     const byWard: Record<string, { n: number; red: number }> = {}
-    for (const r of results) {
+    for (const r of view) {
       const w = r.ward ?? '-'
       byWard[w] ??= { n: 0, red: 0 }
       byWard[w].n++
@@ -94,11 +119,12 @@ export default function BatchScreenPage() {
       for (const a of r.alerts) { c[a.severity]++; if (a.severity === 'red') hasRed = true }
       if (hasRed) { withRed++; byWard[w].red++ }
     }
-    return { total: results.length, withRed, ...c, byWard }
-  }, [results])
+    return { total: view.length, withRed, ...c, byWard }
+  }, [view])
 
   async function exportExcel() {
-    if (!results) return
+    if (!view) return
+    const results = view
     const XLSX = await import('xlsx')
     const alertRows = results.flatMap((r) => r.alerts.map((a) => ({
       AN: r.an, HN: r.patient.hn ?? '', วอร์ด: r.ward ?? '', ระดับ: a.severity, ชนิด: a.type,
@@ -200,17 +226,41 @@ export default function BatchScreenPage() {
       )}
 
       {/* การ์ดต่อคนไข้ */}
-      {results && (
+      {view && (
         <div className="space-y-2.5">
-          {results.map((r) => <PatientCard key={r.an} r={r} />)}
-          {results.length === 0 && <div className="text-center text-muted-foreground py-8">ไม่พบคนไข้ (ตรวจไฟล์ admission/drug)</div>}
+          {view.map((r) => <PatientCard key={r.an} r={r} onMute={setMuteTarget} />)}
+          {view.length === 0 && <div className="text-center text-muted-foreground py-8">ไม่พบคนไข้ (ตรวจไฟล์ admission/drug)</div>}
         </div>
       )}
+
+      {/* ยืนยันก่อนปิดเตือน */}
+      <Dialog open={!!muteTarget} onOpenChange={(o) => { if (!o) { setMuteTarget(null); setMuteNote('') } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><BellOff className="size-5 text-amber-600" /> ไม่ต้องแสดงเตือนกรณีนี้อีก?</DialogTitle>
+            <DialogDescription>
+              ระบบจะ<b className="text-foreground"> ซ่อนเตือนนี้ทุกครั้ง</b> ที่คนไข้เข้าเกณฑ์เดียวกัน (ชนิด + ยาเดิม)
+              และบันทึกไว้ใน “จัดการฐานข้อมูล → ปิดเตือน” (ยกเลิกได้ภายหลัง)
+            </DialogDescription>
+          </DialogHeader>
+          {muteTarget && (
+            <div className="rounded-lg border bg-muted/40 px-3 py-2 text-sm">
+              <div className="font-medium">{muteTarget.title}</div>
+              <div className="text-xs text-muted-foreground">ชนิด: {muteTarget.type} · เกณฑ์นี้จะไม่แสดงกับทุกคนไข้ที่เข้าเงื่อนไข</div>
+            </div>
+          )}
+          <Textarea rows={2} value={muteNote} onChange={(e) => setMuteNote(e.target.value)} placeholder="เหตุผล (เช่น ใช้เร่งคลอดตามข้อบ่งใช้) — ไม่บังคับ" className="text-sm" />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setMuteTarget(null); setMuteNote('') }}>ยกเลิก</Button>
+            <Button className="bg-amber-600 hover:bg-amber-700" onClick={confirmMute}>ยืนยัน ปิดเตือน</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
 
-function PatientCard({ r }: { r: Result }) {
+function PatientCard({ r, onMute }: { r: Result; onMute: (a: ScreeningAlert) => void }) {
   const counts = SEV_ORDER.map((s) => ({ s, n: r.alerts.filter((a) => a.severity === s).length })).filter((x) => x.n > 0)
   const worst = r.alerts.some((a) => a.severity === 'red') ? 'red' : r.alerts.some((a) => a.severity === 'orange') ? 'orange' : r.alerts.length ? 'yellow' : 'green'
   const [open, setOpen] = useState(worst === 'red')
@@ -240,13 +290,17 @@ function PatientCard({ r }: { r: Result }) {
       {open && (
         <div className="px-4 pb-3 pt-1 space-y-2 border-t">
           {sorted.map((a) => (
-            <div key={a.id} className="flex items-start gap-2 text-sm">
+            <div key={a.id} className="group flex items-start gap-2 text-sm">
               <span className="mt-0.5 shrink-0">{SEV[a.severity]}</span>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <div className="font-medium">{a.title}</div>
                 {a.recommendation && <div className="text-xs text-emerald-700 dark:text-emerald-400">→ {a.recommendation}</div>}
                 {a.detail && <div className="text-xs text-muted-foreground">{a.detail}</div>}
               </div>
+              <button type="button" onClick={() => onMute(a)} title="ไม่ต้องแสดงกรณีนี้อีก"
+                className="shrink-0 text-muted-foreground/50 hover:text-amber-600 opacity-0 group-hover:opacity-100 transition p-1">
+                <BellOff className="size-3.5" />
+              </button>
             </div>
           ))}
           {/* ยา + วิธีใช้ที่แพทย์สั่ง (จาก q3) — โชว์ sig เต็ม ให้เภสัชวิเคราะห์เอง */}

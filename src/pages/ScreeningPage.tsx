@@ -26,6 +26,7 @@ import { InterventionReorderWatcher } from '@/features/intervention/Intervention
 import { SubstitutionScreenPanel } from '@/features/substitution/SubstitutionScreenPanel'
 import { useActiveSubstitutions } from '@/features/substitution/hooks'
 import { logDispensing, updateDispensing } from '@/features/history/api'
+import { useMutes, filterMuted } from '@/features/screening/alertMute'
 import { useAuthStore } from '@/features/auth/authStore'
 import { getConfig, getDrugByIcode, listLabRulesForDrug } from '@/features/catalog/api'
 import { toast } from 'sonner'
@@ -67,11 +68,14 @@ export default function ScreeningPage() {
   const expensiveThreshold = screeningConfig?.expensive_unit_price_threshold
   const noDuplicateClasses = screeningConfig?.duplicate_classes
   const { data: substitutions = [] } = useActiveSubstitutions()
+  const { data: mutes } = useMutes()
+  const mutedIds = useMemo(() => new Set((mutes ?? []).map((m) => m.id)), [mutes])
 
   const alerts = useMemo(() => {
     if (drugs.length === 0) return []
-    return runScreening({ drugs, patient, ddiList, labRules, diseaseRules, drugMasters, expensiveThreshold, noDuplicateClasses, substitutions })
-  }, [drugs, patient, ddiList, labRules, diseaseRules, drugMasters, expensiveThreshold, noDuplicateClasses, substitutions])
+    const raw = runScreening({ drugs, patient, ddiList, labRules, diseaseRules, drugMasters, expensiveThreshold, noDuplicateClasses, substitutions })
+    return filterMuted(raw, mutedIds)
+  }, [drugs, patient, ddiList, labRules, diseaseRules, drugMasters, expensiveThreshold, noDuplicateClasses, substitutions, mutedIds])
 
   const counts = useMemo(() => ({
     red: alerts.filter((a) => a.severity === 'red').length,
