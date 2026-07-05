@@ -359,8 +359,9 @@ export function buildRenalRefAlerts(drugs: DrugEntry[], patient: PatientInput, s
 
 // ============ Pediatric ============
 export function buildPediatricAlerts(drugs: DrugEntry[], patient: PatientInput): ScreeningAlert[] {
-  // ใช้ "น้ำหนัก" เป็นหลัก (ไม่ต้องใช้เพศ); แสดงเมื่อไม่ใช่ผู้ใหญ่ชัดเจน
-  if (patient.age !== undefined && patient.age >= 15) return []
+  // แสดงขนาดยาตามน้ำหนัก "เฉพาะเมื่อยืนยันว่าเป็นเด็ก (อายุ < 15 ปี)" เท่านั้น
+  // ผู้ใหญ่ (≥15) หรือไม่ทราบอายุ → ใช้ขนาดยาปกติที่กำหนดไว้แล้ว ไม่ต้องคำนวณ
+  if (patient.age === undefined || patient.age >= 15) return []
   const wt = patient.weight
   const ageMonths = patient.age !== undefined ? patient.age * 12 : undefined
   const alerts: ScreeningAlert[] = []
