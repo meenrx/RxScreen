@@ -15,6 +15,17 @@ interface Result extends Bundle { alerts: ScreeningAlert[] }
 const SEV = { red: '🔴', orange: '🟠', yellow: '🟡', blue: '🔵' } as const
 const SEV_ORDER: (keyof typeof SEV)[] = ['red', 'orange', 'yellow', 'blue']
 
+/** วิธีใช้ยา — ใช้ sig ที่หมอระบุ; ถ้าว่างสร้างจาก iperdose/iperday/frequency (ให้ทุกตัวมีวิธีใช้เสมอ) */
+function usageText(d: Result['drugs'][number]): string {
+  if (d.sig) return d.sig
+  const p: string[] = []
+  if (d.per_dose) p.push(`ครั้งละ ${d.per_dose}`)
+  if (d.per_day) p.push(`วันละ ${d.per_day} ครั้ง`)
+  if (d.frequency) p.push(d.frequency)
+  if (d.prn) p.push('PRN')
+  return p.length ? p.join(' ') : '(ไม่ระบุวิธีใช้)'
+}
+
 export default function BatchScreenPage() {
   const { drugMasters, labRules, ddiList, diseaseRules, isLoading } = useScreeningData()
   const [loaded, setLoaded] = useState<Loaded>({})
@@ -100,8 +111,15 @@ export default function BatchScreenPage() {
       ส้ม: r.alerts.filter((a) => a.severity === 'orange').length,
       เหลือง: r.alerts.filter((a) => a.severity === 'yellow').length,
     }))
+    const drugRows = results.flatMap((r) => r.drugs.map((d) => ({
+      AN: r.an, HN: r.patient.hn ?? '', วอร์ด: r.ward ?? '',
+      ยา: d.master?.generic_name || d.drug_name, ความแรง: d.master?.strength ?? (d.strength_mg ?? ''),
+      ต่อครั้ง: d.per_dose ?? '', ความถี่: d.frequency ?? '', mg_ต่อวัน: d.daily_mg ?? '', PRN: d.prn ? 'PRN' : '',
+      วิธีใช้: usageText(d),
+    })))
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(patientRows), 'สรุปรายคน')
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(drugRows), 'ยาที่สั่ง+วิธีใช้')
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(alertRows), 'รายการ alert')
     XLSX.writeFile(wb, 'คัดกรองทั้งหมด.xlsx')
   }
@@ -231,18 +249,21 @@ function PatientCard({ r }: { r: Result }) {
               </div>
             </div>
           ))}
-          {/* วิธีใช้ยาที่แพทย์สั่ง (จาก q3) */}
+          {/* ยา + วิธีใช้ที่แพทย์สั่ง (จาก q3) — โชว์ sig เต็ม ให้เภสัชวิเคราะห์เอง */}
           {r.drugs.length > 0 && (
             <div className="pt-1">
-              <div className="text-xs font-semibold text-muted-foreground mb-1">💊 ยาที่แพทย์สั่ง ({r.drugs.length})</div>
-              <div className="grid sm:grid-cols-2 gap-x-4 gap-y-0.5 text-xs">
+              <div className="text-xs font-semibold text-muted-foreground mb-1">💊 ยาที่แพทย์สั่ง + วิธีใช้ ({r.drugs.length})</div>
+              <div className="space-y-1 text-xs">
                 {r.drugs.map((d, i) => (
-                  <div key={d.icode + i} className="truncate">
-                    • {d.master?.generic_name || d.drug_name}
-                    {d.strength_mg ? ` ${d.strength_mg}mg` : d.master?.strength ? ` ${d.master.strength}` : ''}
-                    {d.per_dose || d.frequency ? <span className="text-muted-foreground"> ×{d.per_dose ?? '?'} {d.frequency ?? ''}</span> : ''}
-                    {d.daily_mg ? <b className="text-foreground"> = {d.daily_mg} mg/วัน</b> : ''}
-                    {d.prn ? ' (PRN)' : ''}
+                  <div key={d.icode + i} className="border-l-2 border-muted pl-2 py-0.5">
+                    <div>
+                      <b>{d.master?.generic_name || d.drug_name}</b>
+                      {d.strength_mg ? ` ${d.strength_mg}mg` : d.master?.strength ? ` ${d.master.strength}` : ''}
+                      {d.per_dose || d.frequency ? <span className="text-muted-foreground"> · ×{d.per_dose ?? '?'} {d.frequency ?? ''}</span> : ''}
+                      {d.daily_mg ? <b className="text-foreground"> = {d.daily_mg} mg/วัน</b> : ''}
+                      {d.prn ? <span className="text-amber-600"> · PRN</span> : ''}
+                    </div>
+                    <div className={cn('mt-0.5', d.sig ? 'text-muted-foreground' : 'text-muted-foreground/70 italic')}>📝 {usageText(d)}</div>
                   </div>
                 ))}
               </div>
