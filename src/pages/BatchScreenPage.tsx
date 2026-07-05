@@ -265,8 +265,9 @@ function PatientCard({ r, onMute }: { r: Result; onMute: (a: ScreeningAlert) => 
   const worst = r.alerts.some((a) => a.severity === 'red') ? 'red' : r.alerts.some((a) => a.severity === 'orange') ? 'orange' : r.alerts.length ? 'yellow' : 'green'
   const [open, setOpen] = useState(worst === 'red')
   const sorted = [...r.alerts].sort((a, b) => SEV_ORDER.indexOf(a.severity) - SEV_ORDER.indexOf(b.severity))
-  // ยาที่ระบบเตือน "แพ้/แพ้ข้าม" → ไฮไลท์แดงในรายการยา
-  const allergyIcodes = new Set(r.alerts.filter((a) => a.type === 'ALLERGY').flatMap((a) => a.drugs ?? []))
+  // ยาที่ระบบเตือน "แพ้/แพ้ข้าม" (จับจากประวัติแพ้จริง) → ไฮไลท์แดงในรายการยา
+  // ใช้เฉพาะ alert id "allergy_*" (แพ้ตรง/แพ้ข้ามกลุ่ม) — ไม่รวม DRESS (qr_aec_dress) ที่ลิสต์ยาทุกตัว
+  const allergyIcodes = new Set(r.alerts.filter((a) => a.id.startsWith('allergy_')).flatMap((a) => a.drugs ?? []))
 
   return (
     <div className={cn('rounded-xl border-2 bg-card overflow-hidden', worst === 'red' ? 'border-red-300 dark:border-red-800' : worst === 'orange' ? 'border-orange-200' : 'border-border')}>
