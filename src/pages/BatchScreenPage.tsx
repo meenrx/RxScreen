@@ -1,11 +1,12 @@
-import { useState, useMemo, useCallback } from 'react'
-import { Upload, FileSpreadsheet, Layers, Download, Loader2, CheckCircle2, AlertCircle, ChevronDown } from 'lucide-react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
+import { Upload, FileSpreadsheet, Layers, Download, Loader2, CheckCircle2, AlertCircle, ChevronDown, FolderClock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { useScreeningData } from '@/features/screening/useScreeningData'
 import { runScreening } from '@/features/screening/engine'
 import { parseWorkbook, detectKind, buildBundles, KIND_LABEL, FILE_KINDS, type Bundle } from '@/features/batch/excelBundle'
+import { saveBatch, loadBatch, clearBatch } from '@/features/batch/batchStore'
 import type { ScreeningAlert } from '@/types/screening'
 
 type Loaded = Record<string, { name: string; rows: Record<string, unknown>[] }>
@@ -20,22 +21,33 @@ export default function BatchScreenPage() {
   const [results, setResults] = useState<Result[] | null>(null)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
+  const [restored, setRestored] = useState(false)   // แสดงข้อมูลที่บันทึกไว้ (ยังไม่แนบใหม่)
+  const [savedAt, setSavedAt] = useState<number | null>(null)
+
+  // โหลด batch ล่าสุดที่บันทึกไว้ตอนเปิดหน้า
+  useEffect(() => {
+    loadBatch().then((b) => {
+      if (b && Object.keys(b.files).length) { setLoaded(b.files); setSavedAt(b.savedAt); setRestored(true) }
+    }).catch(() => {})
+  }, [])
 
   const onFiles = useCallback(async (files: FileList | null) => {
     if (!files?.length) return
     setErr('')
-    const next: Loaded = { ...loaded }
+    // แนบไฟล์ใหม่หลังดูข้อมูลเก่า → เริ่มใหม่ ยึดเฉพาะที่แนบรอบนี้ (ทับของเดิม)
+    const next: Loaded = restored ? {} : { ...loaded }
     for (const f of Array.from(files)) {
       try {
         const rows = await parseWorkbook(await f.arrayBuffer())
         const kind = detectKind(rows, f.name)
-        if (kind === 'unknown') { setErr(`ไม่ทราบชนิดไฟล์: ${f.name} (ตรวจหัวคอลัมน์ไม่ได้)`) ; continue }
+        if (kind === 'unknown') { setErr(`ไม่ทราบชนิดไฟล์: ${f.name} (ตรวจหัวคอลัมน์ไม่ได้)`); continue }
         next[kind] = { name: f.name, rows }
       } catch (e) { setErr(`อ่าน ${f.name} ไม่สำเร็จ: ${(e as Error).message}`) }
     }
-    setLoaded(next)
-    setResults(null)
-  }, [loaded])
+    const now = Date.now()
+    setLoaded(next); setResults(null); setRestored(false); setSavedAt(now)
+    saveBatch({ savedAt: now, files: next }).catch(() => {})  // บันทึกไว้ดูภายหลัง
+  }, [loaded, restored])
 
   const runAll = useCallback(() => {
     setBusy(true); setErr('')
@@ -50,6 +62,13 @@ export default function BatchScreenPage() {
     } catch (e) { setErr('คัดกรองไม่สำเร็จ: ' + (e as Error).message) }
     finally { setBusy(false) }
   }, [loaded, drugMasters, labRules, ddiList, diseaseRules])
+
+  // แสดงผลของ batch ที่บันทึกไว้อัตโนมัติเมื่อฐานกฎพร้อม
+  useEffect(() => {
+    if (restored && !isLoading && !results && Object.keys(loaded).length) runAll()
+  }, [restored, isLoading, results, loaded, runAll])
+
+  function clearAll() { setLoaded({}); setResults(null); setRestored(false); setSavedAt(null); clearBatch().catch(() => {}) }
 
   const summary = useMemo(() => {
     if (!results) return null
@@ -99,6 +118,15 @@ export default function BatchScreenPage() {
         </div>
       </header>
 
+      {/* แจ้งว่ากำลังแสดงข้อมูลที่บันทึกไว้ */}
+      {restored && savedAt && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 px-4 py-2.5 flex items-center gap-2 text-sm">
+          <FolderClock className="size-4 text-amber-600 shrink-0" />
+          <span>กำลังแสดง<b>ข้อมูลที่บันทึกไว้</b> · แนบเมื่อ {new Date(savedAt).toLocaleString('th-TH')}</span>
+          <span className="text-muted-foreground">— อัปโหลดไฟล์ใหม่เพื่อคัดกรองรอบใหม่ (ทับของเดิม)</span>
+        </div>
+      )}
+
       {/* อัปโหลด */}
       <div className="rounded-2xl border-2 border-dashed p-5 bg-card">
         <label className="flex flex-col items-center justify-center gap-2 cursor-pointer py-4">
@@ -128,7 +156,7 @@ export default function BatchScreenPage() {
             className="bg-gradient-to-r from-indigo-500 to-violet-600">
             {busy ? <Loader2 className="size-4 animate-spin" /> : <Layers className="size-4" />} คัดกรองทั้งหมด
           </Button>
-          {Object.keys(loaded).length > 0 && <Button variant="outline" onClick={() => { setLoaded({}); setResults(null) }}>ล้าง</Button>}
+          {Object.keys(loaded).length > 0 && <Button variant="outline" onClick={clearAll}>ล้าง</Button>}
           {results && <Button variant="outline" onClick={exportExcel}><Download className="size-4" /> Export Excel</Button>}
         </div>
         {isLoading && <div className="text-xs text-muted-foreground mt-2">กำลังโหลดฐานกฎ…</div>}
