@@ -191,8 +191,8 @@ function PatientCard({ r }: { r: Result }) {
           <ChevronDown className={cn('size-4 text-muted-foreground transition', open && 'rotate-180')} />
         </div>
       </button>
-      {open && r.alerts.length > 0 && (
-        <div className="px-4 pb-3 pt-1 space-y-1.5 border-t">
+      {open && (
+        <div className="px-4 pb-3 pt-1 space-y-2 border-t">
           {sorted.map((a) => (
             <div key={a.id} className="flex items-start gap-2 text-sm">
               <span className="mt-0.5 shrink-0">{SEV[a.severity]}</span>
@@ -203,6 +203,23 @@ function PatientCard({ r }: { r: Result }) {
               </div>
             </div>
           ))}
+          {/* วิธีใช้ยาที่แพทย์สั่ง (จาก q3) */}
+          {r.drugs.length > 0 && (
+            <div className="pt-1">
+              <div className="text-xs font-semibold text-muted-foreground mb-1">💊 ยาที่แพทย์สั่ง ({r.drugs.length})</div>
+              <div className="grid sm:grid-cols-2 gap-x-4 gap-y-0.5 text-xs">
+                {r.drugs.map((d, i) => (
+                  <div key={d.icode + i} className="truncate">
+                    • {d.master?.generic_name || d.drug_name}
+                    {d.strength_mg ? ` ${d.strength_mg}mg` : d.master?.strength ? ` ${d.master.strength}` : ''}
+                    {d.per_dose || d.frequency ? <span className="text-muted-foreground"> ×{d.per_dose ?? '?'} {d.frequency ?? ''}</span> : ''}
+                    {d.daily_mg ? <b className="text-foreground"> = {d.daily_mg} mg/วัน</b> : ''}
+                    {d.prn ? ' (PRN)' : ''}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

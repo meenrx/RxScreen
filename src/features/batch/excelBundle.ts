@@ -64,7 +64,7 @@ const ANALYTE: Record<string, string> = {
   wbc: 'wbc', neutrophil: 'neut', neut: 'neut', band: 'band', eosinophil: 'eos', eos: 'eos',
 }
 
-function icdToDiseases(icds: string[], age?: number): { diseases: string[]; is_pregnant: boolean } {
+function icdToDiseases(icds: string[], names: string[], age?: number): { diseases: string[]; is_pregnant: boolean } {
   const set = new Set<string>(); let preg = false
   for (const raw of icds) {
     const c = s(raw).toUpperCase().replace(/[^A-Z0-9]/g, '')
@@ -77,8 +77,53 @@ function icdToDiseases(icds: string[], age?: number): { diseases: string[]; is_p
     if (/^K7[0246]/.test(c)) set.add('Cirrhosis')
     if (/^(O\d|Z34|Z3A)/.test(c)) preg = true
   }
+  // เสริมด้วยชื่อโรค (icd_name) — จับที่ prefix พลาด
+  const blob = names.join(' | ').toLowerCase()
+  if (/pregnan|ตั้งครรภ/.test(blob)) preg = true
+  if (/chronic kidney|renal failure|ไตวาย|ไตเรื้อรัง|\bckd\b/.test(blob)) set.add('CKD')
+  if (/diabet|เบาหวาน/.test(blob)) set.add('DM')
+  if (/heart failure|หัวใจล้มเหลว/.test(blob)) set.add('HF')
+  if (/asthma|copd|หอบหืด|ปอดอุดกั้น/.test(blob)) set.add('Asthma_COPD')
+  if (/cirrhosis|ตับแข็ง|liver failure/.test(blob)) set.add('Cirrhosis')
+  if (/atrial fib/.test(blob)) set.add('AF')
+  if (/anaemia|anemia|โลหิตจาง/.test(blob)) set.add('Anemia')
   if ((age ?? 0) >= 65) set.add('ELDERLY')
   return { diseases: [...set], is_pregnant: preg }
+}
+
+// ความถี่ → จำนวนครั้ง/วัน
+const FREQ: Record<string, number> = {
+  od: 1, qd: 1, hs: 1, once: 1, stat: 1, sid: 1,
+  bid: 2, bd: 2, tid: 3, tds: 3, qid: 4, qds: 4,
+  q4h: 6, q6h: 4, q8h: 3, q12h: 2, q24h: 1, q48h: 0.5,
+}
+function perDay(iperday: unknown, frequency: string, sig: string): number | undefined {
+  const n = num(iperday)
+  if (n !== undefined && n > 0) return n
+  const f = frequency.toLowerCase().replace(/[\s.]/g, '')
+  if (FREQ[f]) return FREQ[f]
+  // เดาจาก sig ไทย
+  if (/วันละ\s*([1-6])\s*ครั้ง/.test(sig)) return Number(sig.match(/วันละ\s*([1-6])\s*ครั้ง/)![1])
+  return undefined
+}
+// ความแรงต่อหน่วย (mg) — เฉพาะเม็ด/แคปซูล (ยาน้ำเป็นต่อปริมาตร ข้าม)
+function strengthMg(strength: string, form: string): number | undefined {
+  if (/\/\s*\d*\s*ml|\/5ml|per\s*5|syrup|suspension|solution|ยาน้ำ/i.test(strength + ' ' + form)) return undefined
+  const mg = strength.match(/(\d+(?:\.\d+)?)\s*mg/i)
+  if (mg) return parseFloat(mg[1])
+  const g = strength.match(/(\d+(?:\.\d+)?)\s*(?:g|gm|กรัม)\b/i)
+  if (g) return parseFloat(g[1]) * 1000
+  return undefined
+}
+function parseSig(sig: string): { route?: string; prn: boolean; meal?: string } {
+  const prn = /prn|เมื่อ.*จำเป็น|เมื่อมีอาการ|เวลาปวด|sos/i.test(sig)
+  const route = /รับประทาน|กิน|oral|po\b/i.test(sig) ? 'กิน'
+    : /ฉีด|inj|iv\b|im\b|sc\b/i.test(sig) ? 'ฉีด'
+      : /หยอด|drop/i.test(sig) ? 'หยอด' : /ทา|apply/i.test(sig) ? 'ทา' : undefined
+  const meal = /ก่อนอาหาร|ac\b/i.test(sig) ? 'ก่อนอาหาร'
+    : /หลังอาหาร|pc\b/i.test(sig) ? 'หลังอาหาร'
+      : /ก่อนนอน|hs\b/i.test(sig) ? 'ก่อนนอน' : undefined
+  return { route, prn, meal }
 }
 
 export interface Bundle { an: string; patient: PatientInput; drugs: DrugEntry[]; ward?: string }
@@ -140,8 +185,8 @@ export function buildBundles(
     else egfr = egfrLab
     if (egfr !== undefined && labDates.scr) labDates.crcl = labDates.scr
 
-    const icds = (dxByAn.get(an) ?? []).map((r) => s(r.icd10))
-    const { diseases, is_pregnant } = icdToDiseases(icds, age)
+    const dxRows = dxByAn.get(an) ?? []
+    const { diseases, is_pregnant } = icdToDiseases(dxRows.map((r) => s(r.icd10)), dxRows.map((r) => s(r.icd_name)), age)
     const allergies = (allergyByAn.get(an) ?? []).map((r) => s(r.agent)).filter(Boolean)
 
     const patient: PatientInput = { an, hn, age, sex, weight, height, scr, egfr, inr, labs, labDates, diseases, allergies, is_pregnant }
@@ -152,7 +197,18 @@ export function buildBundles(
         icode, drug_name: s(r.drug_name), generic_name: s(r.generic_name),
         strength: s(r.strength), dosage_form: s(r.dosage_form),
       } as DrugMaster)
-      return { icode, drug_name: s(r.drug_name) || master.drug_name, sig: s(r.sig) || undefined, master, labRules: rulesByIcode.get(icode) ?? [] }
+      // ขนาดที่แพทย์สั่งจริง (จาก q3) → คำนวณ mg/วัน
+      const sig = s(r.sig)
+      const strMg = strengthMg(s(r.strength) || s(master.strength), s(r.dosage_form) || s(master.dosage_form ?? ''))
+      const per_dose = num(r.iperdose)
+      const per_day = perDay(r.iperday, s(r.frequency), sig)
+      const { route, prn, meal } = parseSig(sig)
+      const daily_mg = (strMg !== undefined && per_dose && per_day) ? strMg * per_dose * per_day : undefined
+      return {
+        icode, drug_name: s(r.drug_name) || master.drug_name, sig: sig || undefined, master,
+        labRules: rulesByIcode.get(icode) ?? [],
+        strength_mg: strMg, per_dose, per_day, daily_mg, frequency: s(r.frequency) || undefined, route, prn, meal,
+      }
     })
 
     bundles.push({ an, patient, drugs, ward })

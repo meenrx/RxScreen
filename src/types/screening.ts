@@ -47,6 +47,15 @@ export interface DrugEntry {
   sig?: string
   master?: DrugMaster
   labRules?: LabRule[]
+  /** ขนาดที่แพทย์สั่ง (จาก q3: iperdose/iperday/strength) — ใช้เช็คขนาดจริง */
+  strength_mg?: number   // ความแรงต่อหน่วย (mg) — เฉพาะเม็ด/แคปซูล
+  per_dose?: number      // จำนวนต่อครั้ง (iperdose)
+  per_day?: number       // จำนวนครั้งต่อวัน (iperday หรือแปลงจาก frequency)
+  daily_mg?: number      // ขนาดรวมต่อวัน (mg) = strength_mg × per_dose × per_day
+  frequency?: string     // BID/TID/OD/q8h ...
+  route?: string         // กิน/ฉีด/หยอด (จาก sig)
+  prn?: boolean          // เมื่อจำเป็น (PRN)
+  meal?: string          // ก่อน/หลังอาหาร/ก่อนนอน (จาก sig)
 }
 
 export type AlertSeverity = 'red' | 'orange' | 'yellow' | 'blue'

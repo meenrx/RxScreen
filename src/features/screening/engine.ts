@@ -5,7 +5,7 @@ import { buildRduAlerts } from './rduRules'
 import { buildQrRuleAlerts } from './qrRules'
 import { findRenalRef, pickRenalBand } from './renalDoseRef'
 import { findHadRef } from './hadRef'
-import { BEERS_2023, NO_CRUSH, G6PD_UNSAFE, LACTATION_AVOID, TERATOGEN, findRef, drugText } from './clinicalRefs'
+import { BEERS_2023, NO_CRUSH, G6PD_UNSAFE, LACTATION_AVOID, TERATOGEN, findRef, drugText, findMaxDose, WEEKLY_DOSING } from './clinicalRefs'
 
 function nameEq(a: string | undefined, b: string | undefined): boolean {
   if (!a || !b) return false
@@ -159,6 +159,46 @@ export function buildLabAlerts(drugs: DrugEntry[], labRules: LabRule[], patient:
   }
   return alerts
 }
+
+// ============ Dose appropriateness (ขนาดที่แพทย์สั่งจริง เทียบมาตรฐาน) ============
+export function buildDoseAlerts(drugs: DrugEntry[], patient: PatientInput): ScreeningAlert[] {
+  const alerts: ScreeningAlert[] = []
+  const isChild = patient.age !== undefined && patient.age < 15
+  for (const d of drugs) {
+    const gen = d.master?.generic_name
+    const name = d.master?.drug_name ?? d.drug_name
+    const label = d.master?.drug_name ?? d.drug_name ?? d.icode
+
+    // 1) ยา "สัปดาห์ละครั้ง" (เช่น methotrexate) แต่สั่งรายวัน = อันตรายร้ายแรง
+    if (WEEKLY_DOSING.test(`${gen ?? ''} ${name ?? ''}`.toLowerCase()) && !d.prn) {
+      const daily = (d.per_day ?? 0) >= 1 && !/สัปดาห์|week|wk|จันทร|อังคาร|พุธ|พฤหัส|ศุกร|เสาร|อาทิตย/i.test(d.sig ?? '')
+      if (daily) alerts.push({
+        id: `dose_weekly_${d.icode}`, type: 'DRP', severity: 'red',
+        title: `🚨 ${label} — สั่งรายวัน! ยานี้ต้องให้ "สัปดาห์ละครั้ง"`,
+        detail: `${d.sig ?? ''} — การให้ methotrexate รายวันเสี่ยง toxicity รุนแรง/เสียชีวิต`,
+        recommendation: 'ตรวจสอบกับแพทย์ทันที — ยืนยันความถี่ (สัปดาห์ละครั้ง)',
+        drugs: [d.icode],
+      })
+    }
+
+    // 2) เกินขนาดสูงสุดผู้ใหญ่ (เฉพาะผู้ใหญ่ + มี daily_mg คำนวณได้)
+    if (isChild || d.daily_mg === undefined || d.prn) continue
+    const ref = findMaxDose(gen, name)
+    if (!ref) continue
+    if (d.daily_mg > ref.max * 1.001) {
+      const over = d.daily_mg / ref.max
+      alerts.push({
+        id: `dose_over_${d.icode}`, type: 'DRP', severity: over >= 1.5 ? 'red' : 'orange',
+        title: `⚠️ ${label} — ขนาดเกินมาตรฐาน: สั่ง ${round1(d.daily_mg)} mg/วัน (สูงสุด ${ref.max})`,
+        detail: [`${d.strength_mg ?? '?'} mg × ${d.per_dose ?? '?'} × ${d.per_day ?? '?'} ครั้ง/วัน`, ref.note].filter(Boolean).join(' · '),
+        recommendation: 'ทบทวนขนาดกับแพทย์ (Lexicomp/BNF)',
+        drugs: [d.icode],
+      })
+    }
+  }
+  return alerts
+}
+function round1(n: number): number { return Math.round(n * 10) / 10 }
 
 function readPatientLab(p: PatientInput, param?: string): number | undefined {
   if (!param) return undefined
@@ -1068,6 +1108,7 @@ export function runScreening(ctx: ScreenContext): ScreeningAlert[] {
     ...buildLasaAlerts(ctx.drugs, ctx.drugMasters),
     ...buildLifestyleAlerts(ctx.drugs, ctx.patient),
     ...buildPediatricAlerts(ctx.drugs, ctx.patient),
+    ...buildDoseAlerts(ctx.drugs, ctx.patient),
     ...buildTimingAlerts(ctx.drugs),
     ...buildDueAlerts(ctx.drugs),
     ...buildNoCrushAlerts(ctx.drugs, ctx.patient),
