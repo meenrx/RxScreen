@@ -268,6 +268,9 @@ function PatientCard({ r, onMute }: { r: Result; onMute: (a: ScreeningAlert) => 
   // ยาที่ระบบเตือน "แพ้/แพ้ข้าม" (จับจากประวัติแพ้จริง) → ไฮไลท์แดงในรายการยา
   // ใช้เฉพาะ alert id "allergy_*" (แพ้ตรง/แพ้ข้ามกลุ่ม) — ไม่รวม DRESS (qr_aec_dress) ที่ลิสต์ยาทุกตัว
   const allergyIcodes = new Set(r.alerts.filter((a) => a.id.startsWith('allergy_')).flatMap((a) => a.drugs ?? []))
+  // เรียงยาตามชื่อ A-Z
+  const sortedDrugs = [...r.drugs].sort((a, b) =>
+    (a.master?.generic_name || a.drug_name || '').localeCompare(b.master?.generic_name || b.drug_name || ''))
 
   return (
     <div className={cn('rounded-xl border-2 bg-card overflow-hidden', worst === 'red' ? 'border-red-300 dark:border-red-800' : worst === 'orange' ? 'border-orange-200' : 'border-border')}>
@@ -323,7 +326,7 @@ function PatientCard({ r, onMute }: { r: Result; onMute: (a: ScreeningAlert) => 
               <div>
                 <div className="font-semibold text-muted-foreground mb-1">💊 ยาที่แพทย์สั่ง + วิธีใช้ ({r.drugs.length})</div>
                 <div className="space-y-0.5">
-                  {r.drugs.map((d, i) => {
+                  {sortedDrugs.map((d, i) => {
                     const risky = allergyIcodes.has(d.icode)
                     return (
                       <div key={d.icode + i} className={cn('leading-snug', risky && 'bg-red-50 dark:bg-red-950/30 rounded px-1 -mx-1')}>
