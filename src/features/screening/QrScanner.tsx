@@ -160,11 +160,12 @@ export function QrScannerModal({ open, onOpenChange, onScan }: Props) {
                 scanDelay={100}
                 retryDelay={80}
                 sound={false}
+                components={{ zoom: true, torch: true, finder: false }}
                 styles={{ container: { width: '100%', height: '100%' } }}
               />
               <div className="absolute inset-8 border-4 border-emerald-400/80 rounded-2xl pointer-events-none animate-pulse" />
             </div>
-            <p className="text-xs text-center text-muted-foreground p-3">เล็ง QR ให้อยู่ในกรอบสีเขียว — สแกนได้หลายสติ๊กเกอร์ต่อเนื่อง</p>
+            <p className="text-xs text-center text-muted-foreground p-3">เล็ง QR ให้อยู่ในกรอบสีเขียว · ใช้แถบซูม 🔍 / ไฟฉาย 🔦 ช่วยได้ — สแกนได้หลายสติ๊กเกอร์ต่อเนื่อง</p>
           </TabsContent>
 
           <TabsContent value="image" className="px-4 pb-4 space-y-3">
