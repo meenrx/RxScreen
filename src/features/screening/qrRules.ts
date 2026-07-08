@@ -105,7 +105,15 @@ export function buildQrRuleAlerts(drugs: DrugEntry[], p: PatientInput): Screenin
   const hepDrugs = inGroup(drugs, G.hepatotoxic)
   const astalt = Math.max(labs.ast ?? 0, labs.alt ?? 0)
   if (astalt > 120 && hepDrugs.length) {
-    push({ id: 'qr_hepatotoxic', type: 'LAB', severity: 'orange', title: `🫀 AST/ALT สูง (${labs.ast ?? '-'}/${labs.alt ?? '-'}) + ยาพิษต่อตับ`, detail: `ยา: ${names(hepDrugs)} — >3×ULN พิจารณาหยุด/ติดตาม LFT${staleNote(p, (labs.ast ?? 0) >= (labs.alt ?? 0) ? 'ast' : 'alt')}`, recommendation: 'ทบทวนความจำเป็น + ติดตาม LFT', drugs: icodes(hepDrugs) })
+    const severe = astalt > 200 // >5×ULN — hepatotoxicity ต้องหยุดยา
+    const stale = staleNote(p, (labs.ast ?? 0) >= (labs.alt ?? 0) ? 'ast' : 'alt')
+    push({
+      id: 'qr_hepatotoxic', type: 'LAB', severity: severe ? 'red' : 'orange',
+      title: `🫀 AST/ALT สูง (${labs.ast ?? '-'}/${labs.alt ?? '-'}) ${severe ? '>5×ULN' : '>3×ULN'} + ยาพิษต่อตับ`,
+      detail: `ยา: ${names(hepDrugs)} — ${severe ? 'เข้าเกณฑ์ hepatotoxicity' : 'พิจารณาหยุด/ติดตาม LFT'}${stale}`,
+      recommendation: severe ? 'หยุดยาพิษต่อตับ + ประเมิน DILI ด่วน' : 'ทบทวนความจำเป็น + ติดตาม LFT',
+      drugs: icodes(hepDrugs),
+    })
   }
   if (labs.albumin !== undefined && labs.albumin < 3.0) {
     const pb = inGroup(drugs, G.protein_bound)
