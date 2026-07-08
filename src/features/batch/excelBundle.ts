@@ -1,5 +1,6 @@
 // โหมด "คัดกรองทั้งหมด" — parse Excel 5 ไฟล์ฝั่ง client → รวมเป็น bundle ต่อคนไข้ (offline)
 import { calcCrCl } from '@/features/renal/calc'
+import { deriveRduContext } from '@/features/screening/rduRules'
 import type { PatientInput, DrugEntry } from '@/types/screening'
 import type { DrugMaster, LabRule } from '@/types/drug'
 
@@ -190,7 +191,8 @@ export function buildBundles(
     const { diseases, is_pregnant } = icdToDiseases(dxRows.map((r) => s(r.icd10)), dxRows.map((r) => s(r.icd_name)), age)
     const allergies = (allergyByAn.get(an) ?? []).map((r) => s(r.agent)).filter(Boolean)
 
-    const patient: PatientInput = { an, hn, age, sex, weight, height, scr, egfr, inr, labs, labDates, diseases, allergies, is_pregnant }
+    const rduCtx = deriveRduContext(dxRows.map((r) => s(r.icd10))) // ICD10 → RDU context อัตโนมัติ
+    const patient: PatientInput = { an, hn, age, sex, weight, height, scr, egfr, inr, labs, labDates, diseases, allergies, is_pregnant, rdu_context: rduCtx.length ? rduCtx : undefined }
 
     const drugs: DrugEntry[] = (drugByAn.get(an) ?? []).map((r) => {
       const icode = s(r.icode)

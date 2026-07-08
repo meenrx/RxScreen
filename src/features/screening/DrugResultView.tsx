@@ -31,6 +31,7 @@ const TYPE_META: Record<AlertType, { emoji: string; label: string }> = {
   NO_CRUSH: { emoji: '⚠️', label: 'ห้ามบด' },
   RDU: { emoji: '📋', label: 'RDU' },
   OMIT: { emoji: '💊', label: 'ควรได้เพิ่ม' },
+  IVC: { emoji: '💉', label: 'IV เข้ากันไม่ได้' },
 }
 
 type Severity = ScreeningAlert['severity']

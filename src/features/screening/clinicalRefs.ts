@@ -245,3 +245,46 @@ export function findTbDose(generic?: string, name?: string): TbDoseRef | undefin
   const hay = `${generic ?? ''} ${name ?? ''}`
   return TB_DOSE.find((t) => t.re.test(hay))
 }
+
+// ================= IV Y-site compatibility (คู่ที่เข้ากันไม่ได้) =================
+// อ้างอิง Trissel's Handbook on Injectable Drugs (ASHP) + King Guide to Parenteral Admixtures
+// รวมเฉพาะคู่ที่พบบ่อย/สำคัญในบัญชียาฉีด รพช. — severe=ตกตะกอน/ห้ามเด็ดขาด
+export interface YSitePair { a: RegExp; b: RegExp; note: string; severe?: boolean }
+export const YSITE_INCOMPAT: YSitePair[] = [
+  // แคลเซียม/สารน้ำมีแคลเซียม
+  { a: /ceftriaxone/, b: /calcium|ringer|hartmann|\bLRS?\b|acetated?\s*ringer/i, note: 'Ceftriaxone + แคลเซียม/Ringer’s lactate → ตกตะกอน ceftriaxone-calcium (FDA warning; อันตรายในทารก)', severe: true },
+  { a: /sodium\s*bicarb|bicarbonate|NaHCO3/i, b: /calcium/, note: 'Sodium bicarbonate + แคลเซียม → ตกตะกอน CaCO₃', severe: true },
+  { a: /calcium/, b: /phosphate|phosphat/i, note: 'Calcium + phosphate → ตกตะกอน calcium phosphate', severe: true },
+  // Sodium bicarbonate / ด่าง กับ catecholamine + others
+  { a: /sodium\s*bicarb|bicarbonate/i, b: /norepinephrine|noradrenaline|adrenaline|epinephrine|dopamine|dobutamine|midazolam|morphine/, note: 'Sodium bicarbonate (ด่าง) ทำให้ catecholamine เสื่อมฤทธิ์ / ตกตะกอน — ให้แยกสาย', severe: true },
+  // Aminoglycoside + beta-lactam (inactivation) และ heparin
+  { a: /gentamicin|amikacin|tobramycin|streptomycin/, b: /ampicillin|penicillin|cloxacillin|piperacillin|ceftriaxone|cefazolin|cefotaxime|ceftazidime/, note: 'Aminoglycoside + beta-lactam → inactivation ถ้าผสม/สายเดียว — ให้แยกเวลา/แยกสาย' },
+  { a: /gentamicin|amikacin|tobramycin/, b: /heparin/, note: 'Aminoglycoside + heparin → เข้ากันไม่ได้' },
+  // Heparin / Enoxaparin
+  { a: /heparin/, b: /amiodarone|ciprofloxacin|levofloxacin|haloperidol|labetalol|dobutamine|gentamicin|amikacin|vancomycin/, note: 'Heparin เข้ากันไม่ได้กับยานี้ (Trissel) — แยกสาย' },
+  // Amiodarone
+  { a: /amiodarone/, b: /sodium\s*bicarb|bicarbonate|aminophylline|furosemide|heparin|piperacillin/, note: 'Amiodarone เข้ากันไม่ได้ (ตกตะกอน/เสื่อม) — ให้ใน D5W สายแยก', severe: true },
+  // Furosemide (ด่าง) กับยากรด
+  { a: /furosemide/, b: /midazolam|ondansetron|metoclopramide|ciprofloxacin|levofloxacin|labetalol|diltiazem|dobutamine|dopamine|morphine|gentamicin|hydralazine|amiodarone/, note: 'Furosemide (ด่าง) + ยากรด → ตกตะกอน — แยกสาย + flush', severe: true },
+  // Vancomycin
+  { a: /vancomycin/, b: /heparin|ceftriaxone|cefepime|cefazolin|cloxacillin|piperacillin|sodium\s*bicarb|bicarbonate/, note: 'Vancomycin + beta-lactam/heparin/ด่าง → ตกตะกอน — แยกสาย' },
+  // Ciprofloxacin/Levofloxacin
+  { a: /ciprofloxacin|levofloxacin/, b: /aminophylline|theophylline|furosemide|heparin|phenytoin/, note: 'Fluoroquinolone เข้ากันไม่ได้กับยานี้' },
+  // Dobutamine / Dopamine
+  { a: /dobutamine/, b: /sodium\s*bicarb|bicarbonate|furosemide|heparin|phenytoin|aminophylline|acyclovir/, note: 'Dobutamine เข้ากันไม่ได้ (ด่าง/ตกตะกอน)' },
+  { a: /dopamine|norepinephrine|noradrenaline/, b: /aminophylline|phenytoin|furosemide/, note: 'Catecholamine เข้ากันไม่ได้กับยานี้' },
+  // Midazolam
+  { a: /midazolam/, b: /omeprazole|pantoprazole|dexamethasone|sodium\s*bicarb|bicarbonate|furosemide/, note: 'Midazolam เข้ากันไม่ได้ (ตกตะกอน) — แยกสาย' },
+  // PPI (ต้องให้เดี่ยวใน NS)
+  { a: /omeprazole|pantoprazole|esomeprazole/, b: /calcium|midazolam|dobutamine|norepinephrine|adrenaline|epinephrine|vancomycin/, note: 'PPI ฉีด ให้เดี่ยวใน NS — เข้ากันไม่ได้กับยานี้' },
+  // Hydralazine
+  { a: /hydralazine/, b: /furosemide|aminophylline|dextrose|hydrocortisone/, note: 'Hydralazine เข้ากันไม่ได้กับยานี้' },
+  // Acyclovir (ด่าง)
+  { a: /acyclovir/, b: /dobutamine|dopamine|morphine|ondansetron|diazepam/, note: 'Acyclovir (ด่าง) เข้ากันไม่ได้ — แยกสาย' },
+]
+
+/** ยาฉีดที่ "เข้ากันไม่ได้กับยาฉีดส่วนใหญ่" → ควรให้แยกสายเสมอ */
+export const YSITE_SOLO: { re: RegExp; note: string }[] = [
+  { re: /phenytoin/, note: 'Phenytoin ตกตะกอนกับยาฉีดส่วนใหญ่ + สารละลาย dextrose — ให้ใน NS สายเดี่ยว + flush ก่อน/หลัง' },
+  { re: /diazepam/, note: 'Diazepam (ตัวทำละลายพิเศษ) ตกตะกอนง่ายมาก — ฉีดช้าสายตรง ห้ามผสม/ห้ามเจือ' },
+]

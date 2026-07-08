@@ -65,6 +65,8 @@ export type AlertType =
   | 'ALLERGY' | 'HAD' | 'LASA' | 'PREG' | 'LACT' | 'BEERS' | 'G6PD'
   | 'FOOD' | 'SMOKING' | 'ALCOHOL' | 'TDM'
   | 'TIMING' | 'DUE' | 'NO_CRUSH' | 'COST' | 'SUBST' | 'RDU'
+  /** IV Y-site compatibility — ยาฉีดผสม/ให้ร่วมสายไม่ได้ */
+  | 'IVC'
   /** ควรได้รับยาเพิ่ม (untreated indication / care gap) เช่น K ต่ำ ควรได้ KCl */
   | 'OMIT'
 

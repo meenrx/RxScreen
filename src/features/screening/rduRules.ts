@@ -257,6 +257,21 @@ export function buildRduAlerts(drugs: DrugEntry[], patient: PatientInput): Scree
   return alerts
 }
 
+/** แปลง ICD-10 (จาก QR/ไฟล์) → RDU context อัตโนมัติ — ไม่ต้องให้เภสัช tick เอง
+ *  จับกับ icd10Include ของแต่ละเกณฑ์ (ยกเว้นถ้ามีรหัสใน icd10Exclude = ใช้ ATB ได้) */
+export function deriveRduContext(icd10s: string[]): RduContextKey[] {
+  const codes = icd10s.map((c) => (c ?? '').toUpperCase().replace(/[^A-Z0-9.]/g, '')).filter(Boolean)
+  if (!codes.length) return []
+  const ctx = new Set<RduContextKey>()
+  for (const check of RDU_CHECKS) {
+    if (!check.contextKey || !check.icd10Include?.length) continue
+    const inc = codes.some((c) => check.icd10Include!.some((p) => c.startsWith(p.replace(/\.$/, ''))))
+    const exc = check.icd10Exclude?.some((p) => codes.some((c) => c.startsWith(p))) ?? false
+    if (inc && !exc) ctx.add(check.contextKey)
+  }
+  return [...ctx]
+}
+
 /** หา trigger drug categories ที่ active ในใบสั่งรอบนี้ — ใช้ใน UI ว่าจะโชว์ context picker หรือไม่ */
 export function getActiveRduTriggers(drugs: DrugEntry[]): {
   needsContext: boolean

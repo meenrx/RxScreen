@@ -35,6 +35,7 @@ const labelByType: Record<ScreeningAlert['type'], string> = {
   SUBST: 'เปลี่ยนบริษัท',
   RDU: 'RDU',
   OMIT: 'ควรได้เพิ่ม',
+  IVC: 'IV เข้ากันไม่ได้',
 }
 
 export function AlertList({ alerts }: { alerts: ScreeningAlert[] }) {

@@ -5,7 +5,7 @@ import { buildRduAlerts } from './rduRules'
 import { buildQrRuleAlerts } from './qrRules'
 import { findRenalRef, pickRenalBand } from './renalDoseRef'
 import { findHadRef } from './hadRef'
-import { BEERS_2023, NO_CRUSH, G6PD_UNSAFE, LACTATION_AVOID, TERATOGEN, findRef, drugText, findMaxDose, WEEKLY_DOSING, findTbDose } from './clinicalRefs'
+import { BEERS_2023, NO_CRUSH, G6PD_UNSAFE, LACTATION_AVOID, TERATOGEN, findRef, drugText, findMaxDose, WEEKLY_DOSING, findTbDose, YSITE_INCOMPAT, YSITE_SOLO } from './clinicalRefs'
 
 function nameEq(a: string | undefined, b: string | undefined): boolean {
   if (!a || !b) return false
@@ -199,6 +199,54 @@ export function buildDoseAlerts(drugs: DrugEntry[], patient: PatientInput): Scre
   return alerts
 }
 function round1(n: number): number { return Math.round(n * 10) / 10 }
+
+// ============ IV Y-site compatibility (ยาฉีดให้ร่วมสายไม่ได้) ============
+function isInjectable(d: DrugEntry): boolean {
+  const f = `${d.master?.dosage_form ?? d.master?.form ?? ''}`.toLowerCase()
+  return /inject|\binj\b|vial|amp(oule|ule|)\b|parenteral|\biv\b|ยาฉีด|ฉีด/.test(f)
+}
+export function buildYSiteAlerts(drugs: DrugEntry[]): ScreeningAlert[] {
+  const inj = drugs.filter(isInjectable)
+  if (inj.length < 2) return []
+  const alerts: ScreeningAlert[] = []
+  const nameOf = (d: DrugEntry) => `${d.master?.generic_name ?? ''} ${d.master?.drug_name ?? d.drug_name ?? ''}`.toLowerCase()
+  const seen = new Set<string>()
+
+  // คู่ที่เข้ากันไม่ได้ (pairwise)
+  for (let i = 0; i < inj.length; i++) {
+    for (let j = i + 1; j < inj.length; j++) {
+      const t1 = nameOf(inj[i]), t2 = nameOf(inj[j])
+      for (const p of YSITE_INCOMPAT) {
+        if ((p.a.test(t1) && p.b.test(t2)) || (p.a.test(t2) && p.b.test(t1))) {
+          const key = [inj[i].icode, inj[j].icode].sort().join('|')
+          if (seen.has(key)) break
+          seen.add(key)
+          alerts.push({
+            id: `ysite_${key}`, type: 'IVC', severity: p.severe ? 'red' : 'orange',
+            title: `💉 IV เข้ากันไม่ได้: ${inj[i].master?.drug_name ?? inj[i].icode} ↔ ${inj[j].master?.drug_name ?? inj[j].icode}`,
+            detail: p.note,
+            recommendation: 'ห้ามผสม/ให้แยกสาย · flush สาย (NS) ระหว่างยา',
+            drugs: [inj[i].icode, inj[j].icode],
+          })
+          break
+        }
+      }
+    }
+  }
+  // ยาที่ต้องให้แยกสายเสมอ (phenytoin/diazepam) เมื่อมียาฉีดอื่นร่วม
+  for (const d of inj) {
+    const t = nameOf(d)
+    const solo = YSITE_SOLO.find((s) => s.re.test(t))
+    if (solo && inj.some((o) => o !== d)) {
+      alerts.push({
+        id: `ysite_solo_${d.icode}`, type: 'IVC', severity: 'orange',
+        title: `💉 ${d.master?.drug_name ?? d.icode} — ให้แยกสาย`,
+        detail: solo.note, recommendation: 'ให้สายเดี่ยว + flush ก่อน/หลัง', drugs: [d.icode],
+      })
+    }
+  }
+  return alerts
+}
 
 // ============ ขนาดยาวัณโรคผู้ใหญ่ตามน้ำหนัก (H/R/Z/E) — คำนวณจากน้ำหนักให้เลย ============
 export function buildTbDoseAlerts(drugs: DrugEntry[], patient: PatientInput): ScreeningAlert[] {
@@ -1140,6 +1188,7 @@ export function runScreening(ctx: ScreenContext): ScreeningAlert[] {
     ...buildLifestyleAlerts(ctx.drugs, ctx.patient),
     ...buildPediatricAlerts(ctx.drugs, ctx.patient),
     ...buildTbDoseAlerts(ctx.drugs, ctx.patient),
+    ...buildYSiteAlerts(ctx.drugs),
     ...buildDoseAlerts(ctx.drugs, ctx.patient),
     ...buildTimingAlerts(ctx.drugs),
     ...buildDueAlerts(ctx.drugs),
