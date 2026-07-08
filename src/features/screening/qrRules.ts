@@ -235,6 +235,27 @@ export function buildQrRuleAlerts(drugs: DrugEntry[], p: PatientInput): Screenin
     push({ id: 'qr_gap_hyperk', type: 'OMIT', severity: 'orange', title: `💊 K⁺ สูงวิกฤต (${labs.k}) แต่ยังไม่มี treatment ลด K`, detail: `ควรพิจารณา kalimate / calcium gluconate / insulin+glucose${staleNote(p, 'k')}`, recommendation: 'จัดการ hyperkalemia ตาม protocol', drugs: [] })
   }
 
+  // ===== 5. ประเด็นเสริมให้ครบ =====
+  // 5.1 TDM — ยา narrow therapeutic index ควรเจาะระดับยา
+  const tdm = inGroup(drugs, /digoxin|phenytoin|valproat|valproic|carbamazepine|lithium|theophylline|vancomycin|gentamicin|amikacin|tobramycin|tacrolimus|cyclosporin|ciclosporin|everolimus|sirolimus/)
+  if (tdm.length) {
+    push({ id: 'qr_tdm', type: 'TDM', severity: 'yellow', title: `🧪 ควรติดตามระดับยา (TDM): ${names(tdm)}`, detail: 'ยา narrow therapeutic index — เจาะระดับยาในเลือด (trough/peak ตามชนิดยา) เพื่อปรับขนาด', recommendation: 'เจาะระดับยา + ปรับขนาดตามผล', drugs: icodes(tdm) })
+  }
+
+  // 5.2 Paracetamol รวมทุกแหล่ง ≤ 4 g/วัน (กันพิษตับ)
+  const para = drugs.filter((d) => /paracetamol|acetaminophen/i.test(`${d.master?.generic_name ?? ''} ${d.master?.drug_name ?? d.drug_name ?? ''}`))
+  if (para.length) {
+    const total = para.reduce((s, d) => s + (d.daily_mg ?? 0), 0)
+    if (total > 4000) push({ id: 'qr_para_max', type: 'DRP', severity: 'red', title: `🫀 Paracetamol รวม ${total} mg/วัน > 4000 — เสี่ยงพิษตับ`, detail: `${names(para)} — ขนาดรวมทุกแหล่งเกิน 4 g/วัน`, recommendation: 'ลดขนาดรวม ≤ 4 g/วัน (≤3 g ถ้าตับ/สูงอายุ/ดื่มสุรา)', drugs: icodes(para) })
+    else if (para.length >= 2) push({ id: 'qr_para_dup', type: 'DRP', severity: 'orange', title: `Paracetamol ซ้ำ ${para.length} รายการ — ระวังขนาดรวม`, detail: `${names(para)} — รวมทุกแหล่ง (รวมยาสูตรผสม) ต้อง ≤ 4 g/วัน`, recommendation: 'ตรวจขนาดรวมต่อวัน', drugs: icodes(para) })
+  }
+
+  // 5.3 Hyponatremia จากยา (ถ้ามีค่า Na)
+  if (labs.na !== undefined && labs.na < 130) {
+    const hypoNa = inGroup(drugs, /hydrochlorothiazide|indapamide|chlorthalidone|thiazide|sertraline|fluoxetine|paroxetine|citalopram|escitalopram|carbamazepine|oxcarbazepine|desmopressin/)
+    if (hypoNa.length) push({ id: 'qr_hypona', type: 'LAB', severity: 'orange', title: `💧 Na ${labs.na} < 130 + ยาที่ทำให้ Na ต่ำ`, detail: `${names(hypoNa)} → เสี่ยง hyponatremia (SIADH/thiazide)${staleNote(p, 'na')}`, recommendation: 'ทบทวนยา + ติดตาม Na', drugs: icodes(hypoNa) })
+  }
+
   return a
 }
 

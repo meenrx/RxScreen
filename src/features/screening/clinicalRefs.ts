@@ -226,3 +226,22 @@ export function findMaxDose(generic?: string, name?: string): MaxDoseEntry | und
 
 /** ยาที่ให้ "สัปดาห์ละครั้ง" — ถ้าสั่งรายวันคือผิดร้ายแรง */
 export const WEEKLY_DOSING = /methotrexate/
+
+// ================= ขนาดยาวัณโรค (H/R/Z/E) ตามน้ำหนัก — ผู้ใหญ่ >15 ปี =================
+// อ้างอิง แนวทางการควบคุมวัณโรคประเทศไทย (DDC) ตารางขนาดยาแนะนำสำหรับผู้ใหญ่
+// น้ำหนัก 35-70 กก. ใช้ขนาดตามช่วง · <35 หรือ >70 คำนวณตามน้ำหนัก (mg/kg)
+export interface TbDoseRef { re: RegExp; label: string; perKg: string; dose: (wt: number) => { mg: number; byWeight?: boolean } }
+export const TB_DOSE: TbDoseRef[] = [
+  { re: /isoniazid|\binh\b/i, label: 'Isoniazid (H)', perKg: '4-6 มก./กก./วัน (สูงสุด 300)',
+    dose: (w) => w < 35 ? { mg: Math.min(300, Math.round(5 * w)), byWeight: true } : { mg: 300 } },
+  { re: /rifampicin|rifampin/i, label: 'Rifampicin (R)', perKg: '8-12 มก./กก./วัน (สูงสุด 600)',
+    dose: (w) => w < 35 ? { mg: Math.round(10 * w), byWeight: true } : w <= 49 ? { mg: 450 } : { mg: 600 } },
+  { re: /pyrazinamide/i, label: 'Pyrazinamide (Z)', perKg: '20-30 มก./กก./วัน',
+    dose: (w) => w < 35 ? { mg: Math.round(25 * w), byWeight: true } : w <= 49 ? { mg: 1000 } : w <= 69 ? { mg: 1500 } : { mg: 2000 } },
+  { re: /ethambutol/i, label: 'Ethambutol (E)', perKg: '15-20 มก./กก./วัน',
+    dose: (w) => w < 35 ? { mg: Math.round(17.5 * w), byWeight: true } : w <= 49 ? { mg: 800 } : w <= 69 ? { mg: 1000 } : { mg: 1200 } },
+]
+export function findTbDose(generic?: string, name?: string): TbDoseRef | undefined {
+  const hay = `${generic ?? ''} ${name ?? ''}`
+  return TB_DOSE.find((t) => t.re.test(hay))
+}

@@ -5,7 +5,7 @@ import { buildRduAlerts } from './rduRules'
 import { buildQrRuleAlerts } from './qrRules'
 import { findRenalRef, pickRenalBand } from './renalDoseRef'
 import { findHadRef } from './hadRef'
-import { BEERS_2023, NO_CRUSH, G6PD_UNSAFE, LACTATION_AVOID, TERATOGEN, findRef, drugText, findMaxDose, WEEKLY_DOSING } from './clinicalRefs'
+import { BEERS_2023, NO_CRUSH, G6PD_UNSAFE, LACTATION_AVOID, TERATOGEN, findRef, drugText, findMaxDose, WEEKLY_DOSING, findTbDose } from './clinicalRefs'
 
 function nameEq(a: string | undefined, b: string | undefined): boolean {
   if (!a || !b) return false
@@ -199,6 +199,37 @@ export function buildDoseAlerts(drugs: DrugEntry[], patient: PatientInput): Scre
   return alerts
 }
 function round1(n: number): number { return Math.round(n * 10) / 10 }
+
+// ============ ขนาดยาวัณโรคผู้ใหญ่ตามน้ำหนัก (H/R/Z/E) — คำนวณจากน้ำหนักให้เลย ============
+export function buildTbDoseAlerts(drugs: DrugEntry[], patient: PatientInput): ScreeningAlert[] {
+  const wt = patient.weight
+  if (!wt) return []
+  if (patient.age !== undefined && patient.age < 15) return [] // เด็ก → ใช้เส้นทางขนาดยาเด็ก (mg/kg)
+  const alerts: ScreeningAlert[] = []
+  for (const d of drugs) {
+    const ref = findTbDose(d.master?.generic_name, d.master?.drug_name ?? d.drug_name)
+    if (!ref) continue
+    const rec = ref.dose(wt)
+    // เทียบกับขนาดที่แพทย์สั่ง (ถ้าคำนวณได้จาก q3) — ต่างเกิน → เตือนส้ม
+    let severity: ScreeningAlert['severity'] = 'blue'
+    let mismatch = ''
+    if (d.daily_mg !== undefined) {
+      const ratio = d.daily_mg / rec.mg
+      if (ratio < 0.85 || ratio > 1.2) { severity = 'orange'; mismatch = ` · ⚠️ สั่ง ${round1(d.daily_mg)} mg/วัน (ต่างจากแนะนำ)` }
+      else mismatch = ` · ✓ สั่ง ${round1(d.daily_mg)} mg/วัน`
+    }
+    alerts.push({
+      id: `tbdose_${d.icode}`,
+      type: 'DRP',
+      severity,
+      title: `💊 ${ref.label} ตามน้ำหนัก ${wt} kg → แนะนำ ${rec.mg} mg/วัน${mismatch}`,
+      detail: `${ref.perKg}${rec.byWeight ? ' · คำนวณตามน้ำหนัก (นน. <35 หรือ >70)' : ''} · แนวทางการรักษาวัณโรค (DDC)`,
+      recommendation: severity === 'orange' ? `ทบทวนขนาด → แนะนำ ${rec.mg} mg/วัน` : undefined,
+      drugs: [d.icode],
+    })
+  }
+  return alerts
+}
 
 function readPatientLab(p: PatientInput, param?: string): number | undefined {
   if (!param) return undefined
@@ -1108,6 +1139,7 @@ export function runScreening(ctx: ScreenContext): ScreeningAlert[] {
     ...buildLasaAlerts(ctx.drugs, ctx.drugMasters),
     ...buildLifestyleAlerts(ctx.drugs, ctx.patient),
     ...buildPediatricAlerts(ctx.drugs, ctx.patient),
+    ...buildTbDoseAlerts(ctx.drugs, ctx.patient),
     ...buildDoseAlerts(ctx.drugs, ctx.patient),
     ...buildTimingAlerts(ctx.drugs),
     ...buildDueAlerts(ctx.drugs),
