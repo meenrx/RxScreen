@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { CheckCircle2, ChevronDown } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { AlertMuteButton } from './AlertMuteButton'
 import type { AlertType, DrugEntry, ScreeningAlert } from '@/types/screening'
 
 /** emoji + ป้ายสั้น ต่อชนิด alert — ใช้เป็น chip ในการ์ดยา */
@@ -118,6 +119,7 @@ export function DrugResultView({ drugs, alerts }: { drugs: DrugEntry[]; alerts: 
                       ? <div className="text-xs font-medium mt-0.5">💡 {a.recommendation}</div>
                       : <div className="text-xs opacity-80 mt-0.5 whitespace-pre-wrap">{a.detail}</div>}
                   </div>
+                  <AlertMuteButton alert={a} />
                 </div>
               </div>
             ))}
@@ -167,11 +169,12 @@ function DrugCard({ drug, list }: { drug: DrugEntry; list: ScreeningAlert[] }) {
       {/* action ต่อประเด็น — เน้นขนาด/สิ่งที่ต้องทำ */}
       <div className="px-3 pb-2 space-y-1">
         {sorted.map((a) => (
-          <div key={a.id} className="flex gap-1.5 text-sm">
+          <div key={a.id} className="group flex gap-1.5 text-sm">
             <span className="shrink-0"><TypeGlyph type={a.type} /></span>
-            <span className={cn('min-w-0', a.recommendation ? 'font-semibold' : 'text-muted-foreground')}>
+            <span className={cn('flex-1 min-w-0', a.recommendation ? 'font-semibold' : 'text-muted-foreground')}>
               {actionText(a)}
             </span>
+            <AlertMuteButton alert={a} className="shrink-0 text-muted-foreground/40 hover:text-amber-600 transition p-0.5 opacity-0 group-hover:opacity-100 focus:opacity-100" />
           </div>
         ))}
 
