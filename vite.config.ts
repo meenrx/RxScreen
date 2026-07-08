@@ -11,7 +11,7 @@ export default defineConfig({
     // Auto-update: พอ deploy เวอร์ชันใหม่ SW จะอัปเดต+รีโหลดเอง (ทั้ง PWA หน้าโฮม + เบราว์เซอร์)
     VitePWA({
       registerType: 'autoUpdate',
-      injectRegister: 'auto',
+      injectRegister: false, // ลงทะเบียนเองใน main.tsx (เพิ่มเช็คอัปเดตตอน resume)
       manifest: false, // ใช้ public/manifest.webmanifest เดิม
       includeAssets: ['favicon.svg', 'favicon-32.png', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png'],
       workbox: {
