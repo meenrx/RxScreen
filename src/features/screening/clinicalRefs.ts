@@ -288,3 +288,18 @@ export const YSITE_SOLO: { re: RegExp; note: string }[] = [
   { re: /phenytoin/, note: 'Phenytoin ตกตะกอนกับยาฉีดส่วนใหญ่ + สารละลาย dextrose — ให้ใน NS สายเดี่ยว + flush ก่อน/หลัง' },
   { re: /diazepam/, note: 'Diazepam (ตัวทำละลายพิเศษ) ตกตะกอนง่ายมาก — ฉีดช้าสายตรง ห้ามผสม/ห้ามเจือ' },
 ]
+
+// ================= ขนาดยาผู้ใหญ่ที่คิดตามน้ำหนัก (นอกจากวัณโรค) =================
+// อ้างอิง Lexicomp / Sanford / IDSA — คำนวณจากน้ำหนักผู้ป่วยเป็นค่าแนะนำ (ปรับตาม CrCl/level)
+export interface AdultWtDoseRef { re: RegExp; label: string; text: (wt: number) => string }
+const r0 = (n: number) => Math.round(n)
+export const ADULT_WT_DOSE: AdultWtDoseRef[] = [
+  { re: /enoxaparin/, label: 'Enoxaparin', text: (w) => `รักษา: 1 mg/kg SC q12h → ${r0(w)} mg q12h (หรือ 1.5 mg/kg OD → ${r0(1.5 * w)} mg) · ป้องกัน 40 mg SC OD · CrCl<30 → 1 mg/kg OD` },
+  { re: /gentamicin|tobramycin/, label: 'Gentamicin/Tobramycin', text: (w) => `Extended-interval 5-7 mg/kg/วัน → ${r0(5 * w)}-${r0(7 * w)} mg OD · conventional 1.7 mg/kg q8h → ${r0(1.7 * w)} mg · ปรับตาม CrCl · ใช้ IBW/AdjBW ถ้าอ้วน` },
+  { re: /amikacin/, label: 'Amikacin', text: (w) => `15 mg/kg/วัน → ${r0(15 * w)} mg OD (extended-interval) · ปรับตาม CrCl · ใช้ IBW/AdjBW ถ้าอ้วน` },
+  { re: /vancomycin/, label: 'Vancomycin', text: (w) => `15-20 mg/kg/ครั้ง (ABW) → ${r0(15 * w)}-${r0(20 * w)} mg q8-12h · loading 25-30 mg/kg → ${r0(25 * w)}-${r0(30 * w)} mg · ปรับตาม level/CrCl` },
+]
+export function findAdultWtDose(generic?: string, name?: string): AdultWtDoseRef | undefined {
+  const hay = `${generic ?? ''} ${name ?? ''}`
+  return ADULT_WT_DOSE.find((x) => x.re.test(hay))
+}

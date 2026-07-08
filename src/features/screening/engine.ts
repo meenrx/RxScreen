@@ -5,7 +5,7 @@ import { buildRduAlerts } from './rduRules'
 import { buildQrRuleAlerts } from './qrRules'
 import { findRenalRef, pickRenalBand } from './renalDoseRef'
 import { findHadRef } from './hadRef'
-import { BEERS_2023, NO_CRUSH, G6PD_UNSAFE, LACTATION_AVOID, TERATOGEN, findRef, drugText, findMaxDose, WEEKLY_DOSING, findTbDose, YSITE_INCOMPAT, YSITE_SOLO } from './clinicalRefs'
+import { BEERS_2023, NO_CRUSH, G6PD_UNSAFE, LACTATION_AVOID, TERATOGEN, findRef, drugText, findMaxDose, WEEKLY_DOSING, findTbDose, YSITE_INCOMPAT, YSITE_SOLO, findAdultWtDose } from './clinicalRefs'
 
 function nameEq(a: string | undefined, b: string | undefined): boolean {
   if (!a || !b) return false
@@ -244,6 +244,27 @@ export function buildYSiteAlerts(drugs: DrugEntry[]): ScreeningAlert[] {
         detail: solo.note, recommendation: 'ให้สายเดี่ยว + flush ก่อน/หลัง', drugs: [d.icode],
       })
     }
+  }
+  return alerts
+}
+
+// ============ ขนาดยาผู้ใหญ่ที่คิดตามน้ำหนัก (enoxaparin/aminoglycoside/vancomycin) ============
+export function buildAdultWtDoseAlerts(drugs: DrugEntry[], patient: PatientInput): ScreeningAlert[] {
+  const wt = patient.weight
+  if (!wt) return []
+  if (patient.age !== undefined && patient.age < 15) return [] // เด็ก → เส้นทางขนาดยาเด็ก
+  const alerts: ScreeningAlert[] = []
+  for (const d of drugs) {
+    const ref = findAdultWtDose(d.master?.generic_name, d.master?.drug_name ?? d.drug_name)
+    if (!ref) continue
+    alerts.push({
+      id: `awt_${d.icode}`,
+      type: 'DRP',
+      severity: 'blue',
+      title: `💉 ${ref.label} ตามน้ำหนัก ${wt} kg`,
+      detail: `${ref.text(wt)} · อ้างอิง Lexicomp/Sanford`,
+      drugs: [d.icode],
+    })
   }
   return alerts
 }
@@ -1188,6 +1209,7 @@ export function runScreening(ctx: ScreenContext): ScreeningAlert[] {
     ...buildLifestyleAlerts(ctx.drugs, ctx.patient),
     ...buildPediatricAlerts(ctx.drugs, ctx.patient),
     ...buildTbDoseAlerts(ctx.drugs, ctx.patient),
+    ...buildAdultWtDoseAlerts(ctx.drugs, ctx.patient),
     ...buildYSiteAlerts(ctx.drugs),
     ...buildDoseAlerts(ctx.drugs, ctx.patient),
     ...buildTimingAlerts(ctx.drugs),
