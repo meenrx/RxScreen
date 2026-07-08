@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Scanner, type IDetectedBarcode } from '@yudiel/react-qr-scanner'
 import { ScanLine, X, Type, CheckCircle2, Upload } from 'lucide-react'
 import { BarcodeDetector } from 'barcode-detector/ponyfill'
@@ -74,6 +74,60 @@ export function QrScannerModal({ open, onOpenChange, onScan }: Props) {
   useEffect(() => {
     if (open) { setSeen(new Set()); setAddedCount(0); setLastAdded(null); setError(null) }
   }, [open])
+
+  // ===== ซูมกล้อง: pinch สองนิ้ว + แถบเลื่อน (hardware zoom ถ้ากล้องรองรับ, ไม่งั้น digital zoom) =====
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const trackRef = useRef<MediaStreamTrack | null>(null)
+  const pinchRef = useRef<{ d: number; z: number } | null>(null)
+  const zoomCfg = useRef({ min: 1, max: 4, step: 0.1, hw: false })
+  const [zoom, setZoom] = useState(1)
+  const [zoomReady, setZoomReady] = useState(false)
+
+  useEffect(() => {
+    if (!open) return
+    let timer: number
+    const scan = () => {
+      const v = wrapRef.current?.querySelector('video') as HTMLVideoElement | null
+      const track = (v?.srcObject as MediaStream | null)?.getVideoTracks?.()[0] ?? null
+      if (v && track && track !== trackRef.current) {
+        videoRef.current = v
+        trackRef.current = track
+        let cfg = { min: 1, max: 4, step: 0.1, hw: false }
+        try {
+          const caps = track.getCapabilities?.() as unknown as { zoom?: { min?: number; max: number; step?: number } }
+          if (caps?.zoom && caps.zoom.max > (caps.zoom.min ?? 1)) {
+            cfg = { min: caps.zoom.min ?? 1, max: caps.zoom.max, step: caps.zoom.step || 0.1, hw: true }
+          }
+        } catch { /* ไม่มี capability → digital zoom */ }
+        zoomCfg.current = cfg
+        v.style.transformOrigin = 'center center'
+        v.style.transform = ''
+        setZoom(cfg.min)
+        setZoomReady(true)
+      }
+      timer = window.setTimeout(scan, 500)
+    }
+    scan()
+    return () => { window.clearTimeout(timer); trackRef.current = null; videoRef.current = null; setZoomReady(false); setZoom(1) }
+  }, [open])
+
+  function applyZoom(z: number) {
+    const cfg = zoomCfg.current
+    const nz = Math.min(cfg.max, Math.max(cfg.min, z))
+    setZoom(nz)
+    if (cfg.hw && trackRef.current) {
+      trackRef.current.applyConstraints({ advanced: [{ zoom: nz }] as unknown as MediaTrackConstraintSet[] }).catch(() => {})
+    } else if (videoRef.current) {
+      videoRef.current.style.transform = `scale(${nz})`
+    }
+  }
+  const touchDist = (t: React.TouchList) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY)
+  const onTouchStart = (e: React.TouchEvent) => { if (e.touches.length === 2) pinchRef.current = { d: touchDist(e.touches), z: zoom } }
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 2 && pinchRef.current) applyZoom(pinchRef.current.z * (touchDist(e.touches) / pinchRef.current.d))
+  }
+  const onTouchEnd = () => { pinchRef.current = null }
 
   /** เพิ่มผลสแกน 1 รายการ (ไม่ปิด modal) — dedupe ด้วย rawValue */
   function addPayload(raw: string): boolean {
@@ -151,7 +205,14 @@ export function QrScannerModal({ open, onOpenChange, onScan }: Props) {
           </TabsList>
 
           <TabsContent value="camera" className="m-0">
-            <div className="relative aspect-square bg-black">
+            <div
+              ref={wrapRef}
+              className="relative aspect-square bg-black overflow-hidden"
+              style={{ touchAction: 'none' }}
+              onTouchStart={onTouchStart}
+              onTouchMove={onTouchMove}
+              onTouchEnd={onTouchEnd}
+            >
               <Scanner
                 onScan={handleScan}
                 onError={(e) => setError(e?.message ? String(e.message) : String(e))}
@@ -160,12 +221,29 @@ export function QrScannerModal({ open, onOpenChange, onScan }: Props) {
                 scanDelay={100}
                 retryDelay={80}
                 sound={false}
-                components={{ zoom: true, torch: true, finder: false }}
+                components={{ torch: true, finder: false }}
                 styles={{ container: { width: '100%', height: '100%' } }}
               />
               <div className="absolute inset-8 border-4 border-emerald-400/80 rounded-2xl pointer-events-none animate-pulse" />
+
+              {/* แถบเลื่อนซูม (แนวตั้ง ด้านขวา) */}
+              {zoomReady && (
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 z-10 flex flex-col items-center gap-1.5">
+                  <button type="button" onClick={() => applyZoom(zoom + zoomCfg.current.step * 5)}
+                    className="size-7 rounded-full bg-black/50 text-white grid place-items-center text-lg leading-none active:scale-90">＋</button>
+                  <input
+                    type="range" min={zoomCfg.current.min} max={zoomCfg.current.max} step={zoomCfg.current.step}
+                    value={zoom} onChange={(e) => applyZoom(parseFloat(e.target.value))}
+                    className="h-36 accent-emerald-400 cursor-pointer"
+                    style={{ writingMode: 'vertical-lr', direction: 'rtl', WebkitAppearance: 'slider-vertical' } as React.CSSProperties}
+                  />
+                  <button type="button" onClick={() => applyZoom(zoom - zoomCfg.current.step * 5)}
+                    className="size-7 rounded-full bg-black/50 text-white grid place-items-center text-lg leading-none active:scale-90">－</button>
+                  <span className="text-[10px] text-white bg-black/50 rounded px-1 tabular-nums">{zoom.toFixed(1)}×</span>
+                </div>
+              )}
             </div>
-            <p className="text-xs text-center text-muted-foreground p-3">เล็ง QR ให้อยู่ในกรอบสีเขียว · ใช้แถบซูม 🔍 / ไฟฉาย 🔦 ช่วยได้ — สแกนได้หลายสติ๊กเกอร์ต่อเนื่อง</p>
+            <p className="text-xs text-center text-muted-foreground p-3">เล็ง QR ให้อยู่ในกรอบสีเขียว · ซูมด้วยสองนิ้วหรือแถบเลื่อนข้าง 🔍 · ไฟฉาย 🔦 — สแกนต่อเนื่องได้</p>
           </TabsContent>
 
           <TabsContent value="image" className="px-4 pb-4 space-y-3">
