@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Scanner, type IDetectedBarcode } from '@yudiel/react-qr-scanner'
 import { ScanLine, X, Type, CheckCircle2, Upload } from 'lucide-react'
 import { BarcodeDetector } from 'barcode-detector/ponyfill'
@@ -57,22 +57,25 @@ interface Props {
 // มือถือ = กล้องหลัง · PC = webcam (ใช้ ideal ไม่บังคับ เพื่อไม่ให้ getUserMedia ล้มบนเครื่องที่ไม่มีกล้องหลัง)
 const SCAN_CONSTRAINTS: MediaTrackConstraints = {
   facingMode: { ideal: 'environment' },
-  width: { ideal: 1920 },
-  height: { ideal: 1080 },
+  // 1280×720 เร็วกว่า 1080p มากในการ decode บนมือถือ และคมพอสำหรับ QR
+  width: { ideal: 1280 },
+  height: { ideal: 720 },
   advanced: [{ focusMode: 'continuous' }] as unknown as MediaTrackConstraintSet[],
 }
+/** ⚠️ ต้องเป็นค่าคงที่ระดับ module — ถ้าเป็น object ใหม่ทุก render จะทำให้ Scanner restart กล้องวนไม่จบ (สแกนไม่ติด) */
+const SCANNER_STYLES = { container: { width: '100%', height: '100%' } } as const
 
 export function QrScannerModal({ open, onOpenChange, onScan }: Props) {
   const [manualText, setManualText] = useState('')
   const [error, setError] = useState<string | null>(null)
-  // โหมดสแกนต่อเนื่อง — สแกนหลายสติ๊กเกอร์สะสมเป็นรายการเดียว
-  const [seen, setSeen] = useState<Set<string>>(new Set())
+  // dedupe สติ๊กเกอร์ซ้ำ — ใช้ ref (ไม่ใช่ state) เพื่อให้ handleScan มี identity คงที่ ไม่ทำให้ Scanner restart
+  const seenRef = useRef<Set<string>>(new Set())
   const [addedCount, setAddedCount] = useState(0)
   const [lastAdded, setLastAdded] = useState<string | null>(null)
 
   // reset ทุกครั้งที่เปิด modal ใหม่
   useEffect(() => {
-    if (open) { setSeen(new Set()); setAddedCount(0); setLastAdded(null); setError(null) }
+    if (open) { seenRef.current = new Set(); setAddedCount(0); setLastAdded(null); setError(null) }
   }, [open])
 
   // ===== ซูมกล้อง: pinch สองนิ้ว + แถบเลื่อน (hardware zoom ถ้ากล้องรองรับ, ไม่งั้น digital zoom) =====
@@ -130,24 +133,25 @@ export function QrScannerModal({ open, onOpenChange, onScan }: Props) {
   const onTouchEnd = () => { pinchRef.current = null }
 
   /** เพิ่มผลสแกน 1 รายการ (ไม่ปิด modal) — dedupe ด้วย rawValue */
-  function addPayload(raw: string): boolean {
-    if (seen.has(raw)) return false // สแกนซ้ำสติ๊กเกอร์เดิม → ข้าม
+  const addPayload = useCallback((raw: string): boolean => {
+    if (seenRef.current.has(raw)) return false // สแกนซ้ำสติ๊กเกอร์เดิม → ข้าม
     const data = parseQrPayload(raw)
     // อ่าน QR ได้ แต่ parse ไม่เจอยา → อย่าเงียบ: โชว์ข้อความดิบให้เห็นว่ารูปแบบ QR เป็นยังไง
     if (data.drugs.length === 0) {
-      setSeen((p) => new Set(p).add(raw))
+      seenRef.current.add(raw)
       setError(`อ่าน QR ได้ แต่ไม่พบรายการยาในรูปแบบที่รองรับ — ข้อความที่อ่านได้: ${raw.slice(0, 160)}`)
       return false
     }
     onScan(data)
-    setSeen((p) => new Set(p).add(raw))
+    seenRef.current.add(raw)
     const n = data.drugs.length
     setAddedCount((c) => c + n)
     setLastAdded(data.drugs.map((d) => d.drug_name ?? d.icode).join(', ') || `${n} รายการ`)
     return true
-  }
+  }, [onScan])
 
-  function handleScan(codes: IDetectedBarcode[]) {
+  // ⚠️ ต้อง useCallback — ถ้า identity เปลี่ยนทุก render Scanner จะ restart กล้องวนไม่จบ → สแกนไม่ติด
+  const handleScan = useCallback((codes: IDetectedBarcode[]) => {
     if (!codes || codes.length === 0) return
     try {
       const added = addPayload(codes[0].rawValue)
@@ -157,7 +161,11 @@ export function QrScannerModal({ open, onOpenChange, onScan }: Props) {
     } catch (e) {
       setError((e as Error).message)
     }
-  }
+  }, [addPayload, onOpenChange])
+
+  const handleScanError = useCallback((e: { message?: string }) => {
+    setError(e?.message ? String(e.message) : String(e))
+  }, [])
 
   function handleManual() {
     if (!manualText.trim()) return
@@ -215,14 +223,13 @@ export function QrScannerModal({ open, onOpenChange, onScan }: Props) {
             >
               <Scanner
                 onScan={handleScan}
-                onError={(e) => setError(e?.message ? String(e.message) : String(e))}
+                onError={handleScanError}
                 formats={['qr_code']}
                 constraints={SCAN_CONSTRAINTS}
-                scanDelay={100}
-                retryDelay={80}
+                scanDelay={0}
+                retryDelay={30}
                 sound={false}
-                components={{ torch: true, finder: false }}
-                styles={{ container: { width: '100%', height: '100%' } }}
+                styles={SCANNER_STYLES}
               />
               <div className="absolute inset-8 border-4 border-emerald-400/80 rounded-2xl pointer-events-none animate-pulse" />
 
