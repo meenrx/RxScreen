@@ -1,6 +1,7 @@
 // โหมด "คัดกรองทั้งหมด" — parse Excel 5 ไฟล์ฝั่ง client → รวมเป็น bundle ต่อคนไข้ (offline)
 import { calcCrCl } from '@/features/renal/calc'
 import { deriveRduContext } from '@/features/screening/rduRules'
+import { icdToDiseaseKeys, icdIsPregnant } from '@/features/screening/icdMap'
 import type { PatientInput, DrugEntry } from '@/types/screening'
 import type { DrugMaster, LabRule } from '@/types/drug'
 
@@ -66,18 +67,8 @@ const ANALYTE: Record<string, string> = {
 }
 
 function icdToDiseases(icds: string[], names: string[], age?: number): { diseases: string[]; is_pregnant: boolean } {
-  const set = new Set<string>(); let preg = false
-  for (const raw of icds) {
-    const c = s(raw).toUpperCase().replace(/[^A-Z0-9]/g, '')
-    if (/^N18/.test(c)) set.add('CKD')
-    if (/^E1[0-4]/.test(c)) set.add('DM')
-    if (/^I48/.test(c)) set.add('AF')
-    if (/^J4[456]/.test(c)) set.add('Asthma_COPD')
-    if (/^I50/.test(c)) set.add('HF')
-    if (/^(D5[0-3]|D64)/.test(c)) set.add('Anemia')
-    if (/^K7[0246]/.test(c)) set.add('Cirrhosis')
-    if (/^(O\d|Z34|Z3A)/.test(c)) preg = true
-  }
+  const set = new Set<string>(icdToDiseaseKeys(icds)) // mapper กลาง (ตรงกับ DISEASE_RULES)
+  let preg = icdIsPregnant(icds)
   // เสริมด้วยชื่อโรค (icd_name) — จับที่ prefix พลาด
   const blob = names.join(' | ').toLowerCase()
   if (/pregnan|ตั้งครรภ/.test(blob)) preg = true
@@ -85,7 +76,7 @@ function icdToDiseases(icds: string[], names: string[], age?: number): { disease
   if (/diabet|เบาหวาน/.test(blob)) set.add('DM')
   if (/heart failure|หัวใจล้มเหลว/.test(blob)) set.add('HF')
   if (/asthma|copd|หอบหืด|ปอดอุดกั้น/.test(blob)) set.add('Asthma_COPD')
-  if (/cirrhosis|ตับแข็ง|liver failure/.test(blob)) set.add('Cirrhosis')
+  if (/cirrhosis|ตับแข็ง|liver failure/.test(blob)) set.add('CIRRHOSIS')
   if (/atrial fib/.test(blob)) set.add('AF')
   if (/anaemia|anemia|โลหิตจาง/.test(blob)) set.add('Anemia')
   if ((age ?? 0) >= 65) set.add('ELDERLY')
@@ -192,7 +183,8 @@ export function buildBundles(
     const allergies = (allergyByAn.get(an) ?? []).map((r) => s(r.agent)).filter(Boolean)
 
     const rduCtx = deriveRduContext(dxRows.map((r) => s(r.icd10))) // ICD10 → RDU context อัตโนมัติ
-    const patient: PatientInput = { an, hn, age, sex, weight, height, scr, egfr, inr, labs, labDates, diseases, allergies, is_pregnant, rdu_context: rduCtx.length ? rduCtx : undefined }
+    const icdCodes = dxRows.map((r) => s(r.icd10)).filter(Boolean)
+    const patient: PatientInput = { an, hn, age, sex, weight, height, scr, egfr, inr, labs, labDates, icd10: icdCodes.length ? icdCodes : undefined, diseases, allergies, is_pregnant, rdu_context: rduCtx.length ? rduCtx : undefined }
 
     const drugs: DrugEntry[] = (drugByAn.get(an) ?? []).map((r) => {
       const icode = s(r.icode)

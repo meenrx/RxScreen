@@ -30,6 +30,11 @@ export interface PatientInput {
   alcohol?: boolean
   /** ผู้ป่วยให้อาหารทางสาย (NG/PEG) — เตือนเรื่อง SR/ER no-crush */
   tube_feeding?: boolean
+  /** ICD-10 ดิบจาก QR/ไฟล์ (HOSxP no-dot เช่น I500) — ตัวแรก = Pdx · ใช้แสดง/ตรวจสอบ */
+  icd10?: string[]
+  /** ระยะ CKD จาก QR Gf "47[3]" → '3' | '3a' | '4' ... */
+  ckd_stage?: string
+  /** key โรคที่ map แล้ว (CKD/DM/HF...) — ใช้กับ DISEASE_RULES */
   diseases?: string[]
   /** allergy → drug name, class, หรือ allergen เช่น "Penicillin", "Sulfa" */
   allergies?: string[]

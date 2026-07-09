@@ -27,6 +27,8 @@ import { SubstitutionScreenPanel } from '@/features/substitution/SubstitutionScr
 import { useActiveSubstitutions } from '@/features/substitution/hooks'
 import { logDispensing, updateDispensing } from '@/features/history/api'
 import { useMutes, filterMuted } from '@/features/screening/alertMute'
+import { icdToDiseaseKeys, icdIsPregnant, icdDisplay } from '@/features/screening/icdMap'
+import { deriveRduContext } from '@/features/screening/rduRules'
 import { useAuthStore } from '@/features/auth/authStore'
 import { getConfig, getDrugByIcode, listLabRulesForDrug } from '@/features/catalog/api'
 import { toast } from 'sonner'
@@ -175,15 +177,18 @@ export default function ScreeningPage() {
     if (fullPatient) {
       await saveCaseRef.current({ onlyIfDirty: true })
       caseLogId.current = undefined
-      setSelectedDiseases(data.diseases ?? []); setLabValues({}); setAiText(''); setMeStatus('unset'); setMeNote('')
+      setSelectedDiseases(icdToDiseaseKeys(data.diseases)); setLabValues({}); setAiText(''); setMeStatus('unset'); setMeNote('')
     }
     if (fullPatient || inMemory.length > 0) setDrugs([...baseDrugs, ...inMemory])
     const allergies = data.allergies?.length
       ? Array.from(new Set([...(basePatient.allergies ?? []), ...data.allergies]))
       : basePatient.allergies
-    const diseases = data.diseases?.length
-      ? Array.from(new Set([...(basePatient.diseases ?? []), ...data.diseases]))
-      : basePatient.diseases
+    // QR ส่ง ICD-10 ดิบ (HOSxP no-dot) → เก็บดิบไว้แสดง Pdx + map เป็น key ให้ DISEASE_RULES จับได้
+    const icd10 = data.diseases?.length
+      ? Array.from(new Set([...(basePatient.icd10 ?? []), ...data.diseases]))
+      : basePatient.icd10
+    const diseases = icd10?.length ? icdToDiseaseKeys(icd10) : basePatient.diseases
+    const rduCtx = icd10?.length ? deriveRduContext(icd10) : basePatient.rdu_context
     const labs = data.labs ? { ...(basePatient.labs ?? {}), ...data.labs } : basePatient.labs
     const labDates = data.labDates ? { ...(basePatient.labDates ?? {}), ...data.labDates } : basePatient.labDates
     setPatient({
@@ -201,13 +206,16 @@ export default function ScreeningPage() {
       labDates,
       g6pd: data.g6pd ?? basePatient.g6pd,
       g6pd_tested: data.g6pd_tested ?? basePatient.g6pd_tested,
-      is_pregnant: data.is_pregnant ?? basePatient.is_pregnant,
+      ckd_stage: data.ckd_stage ?? basePatient.ckd_stage,
+      is_pregnant: data.is_pregnant ?? (icd10?.length ? icdIsPregnant(icd10) : undefined) ?? basePatient.is_pregnant,
       is_lactating: data.is_lactating ?? data.is_pregnant ?? basePatient.is_lactating,
       allergies,
+      icd10,
       diseases,
+      rdu_context: rduCtx,
     })
     // ซิงค์โรคที่ QR ส่งมาเข้า panel เลือกโรค (ให้คัดกรอง disease–drug ทำงาน)
-    if (data.diseases?.length) setSelectedDiseases((prev) => Array.from(new Set([...prev, ...data.diseases!])))
+    if (icd10?.length) setSelectedDiseases((prev) => Array.from(new Set([...prev, ...icdToDiseaseKeys(icd10)])))
     // เตือนถ้ายังไม่เจาะ G6PD (— ไม่ใช่ปกติ)
     if (data.g6pd_tested === false) toast.warning('ยังไม่ได้เจาะ G6PD — ตรวจสอบก่อนจ่ายยากลุ่ม oxidant')
     // เตือนถ้าแพ้ยาหลายตัวเกินกว่าที่ QR โชว์
@@ -320,6 +328,13 @@ export default function ScreeningPage() {
                     {patient.age !== undefined ? `${patient.age} ปี` : ''}{patient.sex ? `${patient.age !== undefined ? ' · ' : ''}${patient.sex === 'M' ? 'ชาย' : 'หญิง'}` : ''}
                   </span>
                 )}
+                {patient.ckd_stage && <span className="text-sm font-medium text-amber-700 dark:text-amber-400">CKD stage {patient.ckd_stage}</span>}
+                {patient.icd10?.length ? (
+                  <span className="text-sm text-muted-foreground truncate">
+                    <b className="text-foreground">Pdx:</b> {icdDisplay(patient.icd10[0])}
+                    {patient.icd10.length > 1 && <span className="text-xs"> (+{patient.icd10.length - 1})</span>}
+                  </span>
+                ) : null}
               </div>
 
               {/* Results header */}

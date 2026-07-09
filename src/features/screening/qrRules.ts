@@ -6,6 +6,7 @@
  */
 import type { DrugEntry, PatientInput, ScreeningAlert } from '@/types/screening'
 import { parseLabDate } from './labDisplay'
+import { ckdStageNum } from './icdMap'
 
 // ===== นิยามกลุ่มยา (regex บน generic_name) =====
 const G = {
@@ -250,7 +251,22 @@ export function buildQrRuleAlerts(drugs: DrugEntry[], p: PatientInput): Screenin
     else if (para.length >= 2) push({ id: 'qr_para_dup', type: 'DRP', severity: 'orange', title: `Paracetamol ซ้ำ ${para.length} รายการ — ระวังขนาดรวม`, detail: `${names(para)} — รวมทุกแหล่ง (รวมยาสูตรผสม) ต้อง ≤ 4 g/วัน`, recommendation: 'ตรวจขนาดรวมต่อวัน', drugs: icodes(para) })
   }
 
-  // 5.3 Hyponatremia จากยา (ถ้ามีค่า Na)
+  // 5.3 CKD stage จาก QR (Gf "47[3]") — ใช้เมื่อไม่มีค่า eGFR/CrCl ตัวเลข (กันเตือนซ้ำ)
+  const stage = ckdStageNum(p.ckd_stage)
+  if (stage && stage >= 3 && renalValue(p) === undefined) {
+    const nsaidS = inGroup(drugs, G.nsaid)
+    if (nsaidS.length) push({ id: 'qr_ckdstage_nsaid', type: 'RENAL', severity: stage >= 4 ? 'red' : 'orange', title: `🫘 CKD stage ${p.ckd_stage} + NSAID`, detail: `${names(nsaidS)} → เร่งไตเสื่อม/AKI · K⁺ สูง`, recommendation: 'เลี่ยง NSAID — ใช้ paracetamol แทน', drugs: icodes(nsaidS) })
+    const metS = inGroup(drugs, G.metformin)
+    if (metS.length && stage >= 4) push({ id: 'qr_ckdstage_met', type: 'RENAL', severity: 'red', title: `🚫 CKD stage ${p.ckd_stage} + Metformin`, detail: 'เสี่ยง lactic acidosis', recommendation: 'หยุด metformin', drugs: icodes(metS) })
+  }
+
+  // 5.4 Hb ต่ำ + ยากลุ่มเลือด (เสี่ยงเลือดออก/ซีดอยู่แล้ว)
+  if (labs.hb !== undefined && bloodDrugs.length) {
+    if (labs.hb < 8) push({ id: 'qr_hb_8', type: 'LAB', severity: 'red', title: `🩸 Hb ${labs.hb} < 8 + ยากลุ่มเลือด`, detail: `${names(bloodDrugs)} — ซีดรุนแรง เสี่ยงเลือดออกซ้ำ${staleNote(p, 'hb')}`, recommendation: 'ทบทวน/หยุดยาต้านเกล็ดเลือด-กันเลือดแข็ง + หาสาเหตุซีด', drugs: icodes(bloodDrugs) })
+    else if (labs.hb < 10) push({ id: 'qr_hb_10', type: 'LAB', severity: 'orange', title: `Hb ${labs.hb} < 10 + ยากลุ่มเลือด`, detail: `${names(bloodDrugs)} — เฝ้าระวังเลือดออก/ติดตาม Hb${staleNote(p, 'hb')}`, drugs: icodes(bloodDrugs) })
+  }
+
+  // 5.5 Hyponatremia จากยา (ถ้ามีค่า Na)
   if (labs.na !== undefined && labs.na < 130) {
     const hypoNa = inGroup(drugs, /hydrochlorothiazide|indapamide|chlorthalidone|thiazide|sertraline|fluoxetine|paroxetine|citalopram|escitalopram|carbamazepine|oxcarbazepine|desmopressin/)
     if (hypoNa.length) push({ id: 'qr_hypona', type: 'LAB', severity: 'orange', title: `💧 Na ${labs.na} < 130 + ยาที่ทำให้ Na ต่ำ`, detail: `${names(hypoNa)} → เสี่ยง hyponatremia (SIADH/thiazide)${staleNote(p, 'na')}`, recommendation: 'ทบทวนยา + ติดตาม Na', drugs: icodes(hypoNa) })
