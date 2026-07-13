@@ -328,6 +328,7 @@ export default function ScreeningPage() {
                     {patient.age !== undefined ? `${patient.age} ปี` : ''}{patient.sex ? `${patient.age !== undefined ? ' · ' : ''}${patient.sex === 'M' ? 'ชาย' : 'หญิง'}` : ''}
                   </span>
                 )}
+                {patient.inr !== undefined && <span className="text-sm font-medium text-rose-600 dark:text-rose-400">INR {patient.inr}</span>}
                 {patient.ckd_stage && <span className="text-sm font-medium text-amber-700 dark:text-amber-400">CKD stage {patient.ckd_stage}</span>}
                 {patient.icd10?.length ? (
                   <span className="text-sm text-muted-foreground truncate">
