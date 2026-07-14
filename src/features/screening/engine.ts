@@ -389,6 +389,8 @@ function resolveGfr(
     const { crcl } = calcCrCl({ age: patient.age, weight: patient.weight, height: patient.height, sex: patient.sex, scr: patient.scr })
     return { gfr: crcl, label: 'CrCl' }
   }
+  // ไม่มี CrCl/SCr แต่ QR ส่ง GFR มา → ใช้ GFR แทน (ประมาณการปรับ dose)
+  if (patient.labs?.gfr !== undefined) return { gfr: patient.labs.gfr, label: 'eGFR' }
   return null
 }
 

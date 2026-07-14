@@ -145,8 +145,9 @@ export function computeRequiredFields(drugs: DrugEntry[], patient: PatientInput 
     //    - rule ที่ใช้ eGFR → ขอ eGFR ตรง ๆ ไม่ต้องคำนวณ
     const renalRule = rules.find((r) => r.dose_meta)
     if (renalRule && !syrup) {
-      // ถ้ามีค่าไต (CrCl/eGFR) อยู่แล้ว เช่นจาก QR → ใช้ได้เลย ไม่ต้องขอ SCr มาคำนวณ
-      const haveRenal = patient.egfr !== undefined && patient.egfr > 0
+      // ถ้ามีค่าไตอยู่แล้ว เช่นจาก QR (CrCl→egfr หรือ GFR→labs.gfr) → ใช้ได้เลย ไม่ต้องขอ SCr มาคำนวณ
+      const haveRenal = (patient.egfr !== undefined && patient.egfr > 0)
+        || (patient.labs?.gfr !== undefined && patient.labs.gfr > 0)
       if (!haveRenal) {
         if (renalBasisOf(renalRule) === 'egfr') {
           add('egfr', 'eGFR', 'mL/min', `${name} → ปรับ dose ตาม eGFR (กรอกค่าตรง)`, 'high')
@@ -156,10 +157,12 @@ export function computeRequiredFields(drugs: DrugEntry[], patient: PatientInput 
         }
       }
     }
-    // 1.2) NSAID → ขอค่าไต (eGFR) เพื่อเช็คความปลอดภัย (เสี่ยง AKI)
+    // 1.2) NSAID → ขอค่าไต (eGFR) เพื่อเช็คความปลอดภัย (เสี่ยง AKI) — ยกเว้นถ้ามีค่าไตจาก QR แล้ว
     //   เก็บไว้แม้เป็นยาน้ำ — เด็กกินยาน้ำ NSAID ก็เสี่ยง AKI เหมือนกัน
     if (isNsaid(d)) {
-      add('egfr', 'eGFR', 'mL/min', `${name} (NSAID) → ควรเช็คการทำงานของไต`, 'high')
+      const haveRenal = (patient.egfr !== undefined && patient.egfr > 0)
+        || (patient.labs?.gfr !== undefined && patient.labs.gfr > 0)
+      if (!haveRenal) add('egfr', 'eGFR', 'mL/min', `${name} (NSAID) → ควรเช็คการทำงานของไต`, 'high')
     }
     // 1.5) ยาที่ต้องใช้ IBW → ขอส่วนสูงเพิ่ม
     //   flag ในฐานข้อมูล หรือ built-in list (aminoglycosides, vancomycin)
@@ -260,7 +263,8 @@ export function isFieldFilled(patient: PatientInput, extra: Record<string, unkno
     case 'height': return patient.height !== undefined && patient.height > 0
     case 'sex': return patient.sex !== undefined
     case 'scr': return patient.scr !== undefined && patient.scr > 0
-    case 'egfr': return patient.egfr !== undefined && patient.egfr > 0
+    case 'egfr': return (patient.egfr !== undefined && patient.egfr > 0)
+      || (patient.labs?.gfr !== undefined && patient.labs.gfr > 0)  // GFR จาก QR (Gf) ก็นับว่ามีค่าไตแล้ว
     case 'inr': return patient.inr !== undefined && patient.inr > 0
     case 'allergies': return (patient.allergies?.length ?? 0) > 0
     case 'is_pregnant': return patient.is_pregnant !== undefined
