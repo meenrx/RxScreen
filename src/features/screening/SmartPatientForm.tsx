@@ -112,9 +112,9 @@ export function SmartPatientForm({ drugs, value, onChange }: Props) {
 
           {isRequired('is_pregnant') && <YesNoChip emoji="🤰" label="ตั้งครรภ์" value={value.is_pregnant} missing={isMissing('is_pregnant')} onChange={(v) => set('is_pregnant', v)} />}
           {isRequired('is_lactating') && <YesNoChip emoji="🤱" label="ให้นม" value={value.is_lactating} missing={isMissing('is_lactating')} onChange={(v) => set('is_lactating', v)} />}
-          {isRequired('g6pd') && <YesNoChip emoji="🩸" label="G6PD" value={value.g6pd} missing={isMissing('g6pd')} onChange={(v) => set('g6pd', v)} />}
+          {isRequired('g6pd') && <YesNoChip emoji="🩸" label="G6PD พร่อง" negLabel="G6PD ปกติ" value={value.g6pd} missing={isMissing('g6pd')} onChange={(v) => set('g6pd', v)} />}
           {isRequired('smoking') && <YesNoChip emoji="🚬" label="สูบบุหรี่" value={value.smoking} missing={isMissing('smoking')} onChange={(v) => set('smoking', v)} />}
-          {isRequired('alcohol') && <YesNoChip emoji="🍺" label="แอลกอฮอล์" value={value.alcohol} missing={isMissing('alcohol')} onChange={(v) => set('alcohol', v)} />}
+          {isRequired('alcohol') && <YesNoChip emoji="🍺" label="ดื่มสุรา" negLabel="ไม่ดื่มสุรา" value={value.alcohol} missing={isMissing('alcohol')} onChange={(v) => set('alcohol', v)} />}
 
           {crcl !== null && (
             <span className={cn(
@@ -242,33 +242,35 @@ export function SmartPatientForm({ drugs, value, onChange }: Props) {
 }
 
 /** ใช่/ไม่ใช่ แบบ chip 1 บรรทัด — กดเลือก ?/✓/✕ ในตัวเดียวกัน */
-function YesNoChip({ emoji, label, value, missing, onChange }: {
+function YesNoChip({ emoji, label, negLabel, value, missing, onChange }: {
   emoji: string
   label: string
+  /** ข้อความตอน "ไม่" (ค่าเริ่ม `ไม่<label>`) */
+  negLabel?: string
   value: boolean | undefined
   missing?: boolean
   onChange: (v: boolean | undefined) => void
 }) {
-  const next = value === undefined ? true : value === true ? false : undefined
+  // ยังไม่ตอบ → ตั้งเป็น "ไม่" ก่อน (ค่าที่พบบ่อย) · ไม่ ↔ ใช่ สลับกันไปมา
+  const next = value === undefined ? false : !value
   const tone =
     value === true ? 'bg-amber-500 text-white border-amber-500' :
     value === false ? 'bg-emerald-500 text-white border-emerald-500' :
-    'bg-card border-input hover:bg-accent'
-  const mark = value === true ? '✓' : value === false ? '✕' : '?'
+    'bg-card border-input hover:bg-accent text-muted-foreground'
+  const text = value === true ? label : value === false ? (negLabel ?? `ไม่${label}`) : `${label}?`
   return (
     <button
       type="button"
       onClick={() => onChange(next)}
-      title={`${label} — กดเพื่อสลับ ใช่/ไม่ใช่/ยังไม่ตอบ`}
+      title={`กดเพื่อสลับ: ${negLabel ?? `ไม่${label}`} ↔ ${label}`}
       className={cn(
-        'inline-flex items-center gap-1.5 h-10 px-2.5 rounded-md border text-sm font-medium transition active:scale-95',
+        'inline-flex items-center gap-1.5 h-10 px-3 rounded-md border text-sm font-medium transition active:scale-95',
         tone,
         missing && value === undefined && 'ring-2 ring-amber-300 border-amber-300 bg-amber-50/40 dark:bg-amber-950/20',
       )}
     >
       <span>{emoji}</span>
-      <span>{label}</span>
-      <span className="ml-0.5 w-4 grid place-items-center rounded bg-black/10 dark:bg-white/10 text-[11px] font-bold">{mark}</span>
+      <span>{text}</span>
     </button>
   )
 }
